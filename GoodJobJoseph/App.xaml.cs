@@ -15,7 +15,7 @@ public partial class App : Application
 {
     public static RollingFileLogger Logger = null!;
     public static AppSettingsService? Services;
-    public static readonly string Version = "2.0.2";
+    public static readonly string Version = "2.0.3";
 
     private DatabaseService? _db;
     private SettingsService? _settings;

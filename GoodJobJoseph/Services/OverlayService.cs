@@ -56,10 +56,10 @@ public class OverlayService
         }
     }
 
-    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, string? quoteText, CelebrationResolver.ResolvedResult? resolved, Action? onCompleted)
-        => ShowOverlay(imageSource, settings, null, quoteText, resolved, onCompleted);
+    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, string? quoteText, CelebrationResolver.ResolvedResult? resolved, Action? onCompleted, string? cacheKey = null)
+        => ShowOverlay(imageSource, settings, null, quoteText, resolved, onCompleted, cacheKey);
 
-    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Action? onCompleted)
+    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Action? onCompleted, string? cacheKey = null)
     {
         lock (_lock)
         {
@@ -98,11 +98,11 @@ public class OverlayService
                     _showing = false;
                 }
                 onCompleted?.Invoke();
-            });
+            }, cacheKey);
         }
     }
 
-    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Rect? placement, string? quoteText, CelebrationResolver.ResolvedResult? resolved, Action? onCompleted)
+    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Rect? placement, string? quoteText, CelebrationResolver.ResolvedResult? resolved, Action? onCompleted, string? cacheKey = null)
     {
         lock (_lock)
         {
@@ -141,7 +141,7 @@ public class OverlayService
                     _showing = false;
                 }
                 onCompleted?.Invoke();
-            });
+            }, cacheKey);
         }
     }
 

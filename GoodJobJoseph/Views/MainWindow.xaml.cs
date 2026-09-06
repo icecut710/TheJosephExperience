@@ -43,6 +43,13 @@ public partial class MainWindow : Window
 
         SizeChanged += (_, _) => UpdateStatusBarVisibility();
 
+        // Live CS2 status updates
+        var cs2 = Services.GameIntegration?.Invoke();
+        if (cs2 is not null)
+        {
+            cs2.StateChanged += _ => Dispatcher.Invoke(UpdateStatusBar);
+        }
+
         ShowCelebrationView();
     }
 
@@ -279,7 +286,7 @@ public partial class MainWindow : Window
         NavStatusCs2.Text = StatusCs2.Text;
         NavStatusAudio.Text = "Audio: Ready";
         NavStatusHotkey.Text = "Hotkeys: F2 · F8";
-        StatusVersion.Text = "2.0.2";
+        StatusVersion.Text = "2.0.3";
         StatusAudio.Text = settings.AudioStopPolicy == AudioStopPolicy.AllowOverlapping
             ? "Audio: Overlap allowed"
             : "Audio: Stop previous";

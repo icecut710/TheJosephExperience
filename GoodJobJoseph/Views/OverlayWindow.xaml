@@ -23,7 +23,6 @@
                     RenderTransformOrigin="0.5,0.5"
                    RenderOptions.BitmapScalingMode="LowQuality"
                    RenderOptions.EdgeMode="Aliased"
-                   Stretch="Fill"
                    HorizontalAlignment="Stretch"
                    VerticalAlignment="Stretch"/>
             <Border x:Name="GlowBorder" Background="Transparent" Opacity="0"

@@ -156,7 +156,7 @@ public class CelebrationService
         {
             _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
             _history?.AddEntry(image.Id, image.DisplayName, triggerType ?? "manual", false, overlaySettings.OverlayDurationMs);
-        });
+        }, image.Id);
 
         _audio.PlaySound(settings, image);
         CelebrationStarted?.Invoke(image.DisplayName);
@@ -401,7 +401,7 @@ public class CelebrationService
             {
                 _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
                 _history?.AddEntry(image.Id, image.DisplayName, triggerType, false, overlaySettings.OverlayDurationMs);
-            });
+            }, image.Id);
             _audio.PlaySound(settings, image);
             CelebrationStarted?.Invoke(image.DisplayName);
             return true;

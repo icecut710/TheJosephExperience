@@ -32,10 +32,10 @@ public partial class OverlayWindow : Window
         InitializeComponent();
     }
 
-    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Action? onCompleted)
-        => ShowOverlay(imageSource, settings, null, null, null, onCompleted);
+    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Action? onCompleted, string? cacheKey = null)
+        => ShowOverlay(imageSource, settings, null, null, null, onCompleted, cacheKey);
 
-    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Rect? placement, string? quoteText, CelebrationResolver.ResolvedResult? resolved, Action? onCompleted)
+    public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Rect? placement, string? quoteText, CelebrationResolver.ResolvedResult? resolved, Action? onCompleted, string? cacheKey = null)
     {
         _onCompleted = onCompleted;
         _animationRunning = false;
@@ -50,7 +50,7 @@ public partial class OverlayWindow : Window
         if (imageSource is not null)
         {
             if (settings.TrimTransparentBounds)
-                imageSource = TrimTransparentBounds(imageSource);
+                imageSource = TrimTransparentBounds(imageSource, cacheKey);
 
             JosephImage.Source = imageSource;
             JosephImage.Visibility = Visibility.Visible;
@@ -193,6 +193,16 @@ public partial class OverlayWindow : Window
     }
 
     private static readonly Dictionary<BitmapSource, BitmapSource> _trimCache = new();
+    private static readonly Dictionary<string, BitmapSource> _trimKeyedCache = new(StringComparer.Ordinal);
+    private const int TrimKeyedCacheMaxEntries = 64;
+
+    /// <summary>Pixel formats that are guaranteed to carry no alpha channel (fully opaque).</summary>
+    private static readonly HashSet<PixelFormat> NoAlphaFormats = new()
+    {
+        PixelFormats.Bgr24, PixelFormats.Bgr32, PixelFormats.Bgr555, PixelFormats.Bgr565,
+        PixelFormats.Gray2, PixelFormats.Gray4, PixelFormats.Gray8, PixelFormats.Gray16,
+        PixelFormats.Rgb24, PixelFormats.Rgb48, PixelFormats.Rgb128Float, PixelFormats.Cmyk32
+    };
 
     private void ApplySizeAndPosition(AppSettings settings, BitmapSource? source, double scale, Rect? placement = null)
     {
@@ -297,21 +307,31 @@ public partial class OverlayWindow : Window
         }
     }
 
-    private BitmapSource TrimTransparentBounds(BitmapSource source)
+    private BitmapSource TrimTransparentBounds(BitmapSource source, string? cacheKey)
     {
+        if (source is null) return source;
+
+        if (cacheKey is not null && _trimKeyedCache.TryGetValue(cacheKey, out var hit))
+            return hit;
         if (_trimCache.TryGetValue(source, out var cached))
             return cached;
 
+        // Fast path: formats with no alpha channel are guaranteed fully opaque.
+        if (NoAlphaFormats.Contains(source.Format))
+        {
+            return CacheTrim(cacheKey, source, source);
+        }
+
         try
         {
-            if (source.Format != PixelFormats.Bgra32 && source.Format != PixelFormats.Bgra32)
+            if (source.Format != PixelFormats.Bgra32)
             {
                 source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
             }
 
             var w = source.PixelWidth;
             var h = source.PixelHeight;
-            if (w == 0 || h == 0) return source;
+            if (w == 0 || h == 0) return CacheTrim(cacheKey, source, source);
 
             var stride = w * 4;
             var pixels = new byte[h * stride];
@@ -338,10 +358,10 @@ public partial class OverlayWindow : Window
                 }
             }
 
-            if (maxX < minX || maxY < minY) return source;
+            if (maxX < minX || maxY < minY) return CacheTrim(cacheKey, source, source);
 
             var newW = maxX - minX + 1;
-                    var newH = maxY - minY + 1;
+            var newH = maxY - minY + 1;
             var newStride = newW * 4;
             var cropped = new byte[newH * newStride];
 
@@ -354,13 +374,29 @@ public partial class OverlayWindow : Window
             }
 
             var result = BitmapSource.Create(newW, newH, 96, 96, PixelFormats.Bgra32, null, cropped, newStride);
-            _trimCache[source] = result;
-            return result;
+            return CacheTrim(cacheKey, source, result);
         }
         catch
         {
             return source;
         }
+    }
+
+    private static BitmapSource CacheTrim(string? cacheKey, BitmapSource source, BitmapSource result)
+    {
+        if (!ReferenceEquals(source, result))
+        {
+            _trimCache[source] = result;
+        }
+        if (cacheKey is not null)
+        {
+            if (_trimKeyedCache.Count >= TrimKeyedCacheMaxEntries)
+            {
+                _trimKeyedCache.Clear();
+            }
+            _trimKeyedCache[cacheKey] = result;
+        }
+        return result;
     }
 
     private void ApplyTextPosition(AppSettings settings)
