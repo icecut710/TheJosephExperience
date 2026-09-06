@@ -1,18 +1,21 @@
 {
-  "version": "2.0.1",
+  "version": "2.0.2",
   "minimumSupportedVersion": "2.0.0",
-  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.1/TheJosephExperience-v2.0.1-win-x64.zip",
-  "sha256": "4efa735e4d11b8b2633e32e7d790e161296842a65e459df78e35691d9b3a0650",
-  "fileSize": 97998356,
-  "releaseDateUtc": "2026-09-06T01:23:00Z",
+  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.2/TheJosephExperience-v2.0.2-win-x64.zip",
+  "sha256": "EA8D89093AD47AF5C6CFC29183A48BAC126697EF22B069D3A4DF450A2D578C7D",
+  "fileSize": 97999993,
+  "releaseDateUtc": "2026-09-06T02:00:00Z",
   "releaseType": "release",
   "mandatory": false,
   "releaseNotes": [
-    "v2.0.1: Production release with CS2 GSI integration",
-    "Cloud update pipeline with manifest-based download and SHA-256 verification",
-    "Market range selector and celebration activity graph",
-    "Hotkey rebinding (F2 celebrate, Shift+3 secondary, F8 cycle sounds, Stop Audio)",
-    "Single-instance mutex prevents duplicate processes",
-    "Updater helper with backup/rollback support"
+    "v2.0.2: Root-cause fix pass",
+    "Fixed blank Hotkeys/Updates settings tabs (missing SecondaryButton style)",
+    "Fixed slider track visibility (only thumb was rendering)",
+    "Fixed update manifest URL typo",
+    "Simplified hotkeys to F2 (Celebration) + F8 (Audio Toggle)",
+    "Debounced settings saves to fix slider drag latency",
+    "Settings scroll resets to top on category switch",
+    "Supabase uploads use configurable upload token (service role key)",
+    "Version 2.0.2"
   ]
 }
