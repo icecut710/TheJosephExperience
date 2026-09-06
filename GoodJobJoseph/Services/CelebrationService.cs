@@ -250,14 +250,6 @@ public class CelebrationService
         _audio?.StopCurrent();
     }
 
-    /// <summary>
-    /// Awards Joseph Coins based on the celebration preset used.
-    // Rarer presets award more coins. Coins persist in app_metadata.
-    /// These are INTERNAL reward points, NOT the real NADD/SOL token.
-    /// </summary>
-    // Coins feature removed - no longer awarded or displayed.
-    // ------------------------------------------------------------ game-event integration
-
     /// <summary>True while an overlay is currently on screen.</summary>
     public bool IsBusy => _isCelebrating || _overlay.IsVisible;
 

@@ -7,7 +7,6 @@ namespace JosephExperience.Services;
 /// <summary>
 /// Real NADD/SOL token market data from GeckoTerminal API for the
 /// NADD / SOL pool on Raydium (4JHhAqVBXNfNCPCcbEkCZp3yPD6rxCgNc3AP2EpFUsBS).
-/// This is separate from the internal Joseph Coin reward system.
 /// </summary>
 public class RealNaddService : IDisposable
 {
@@ -283,7 +282,7 @@ public class RealNaddService : IDisposable
 }
 
 /// <summary>
-/// Real NADD/SOL market data from GeckoTerminal (separate from internal Joseph Coins).
+/// Real NADD/SOL market data from GeckoTerminal.
 /// </summary>
 public class NaddMarketData
 {

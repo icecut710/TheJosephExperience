@@ -325,11 +325,40 @@ public class DatabaseService : IDisposable
         }
         using (var cmd = connection.CreateCommand())
         {
+            cmd.CommandText = "SELECT COUNT(*) FROM celebration_history WHERE shown_at >= date('now')";
+            stats.CelebrationsToday = Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
+        }
+        using (var cmd = connection.CreateCommand())
+        {
             cmd.CommandText = "SELECT MAX(shown_at) FROM celebration_history";
             var max = cmd.ExecuteScalar();
             if (max is not null && max is not DBNull)
             {
-                stats.LastCelebration = DateTime.TryParse(max.ToString(), out var dt) ? dt.ToLocalTime() : null;
+                if (DateTime.TryParse(max.ToString(), CultureInfo.InvariantCulture, out var dt))
+                    stats.LastCelebration = dt.ToLocalTime();
+                else
+                    stats.LastCelebration = null;
+            }
+            else
+            {
+                stats.LastCelebration = null;
+            }
+        }
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "SELECT price FROM nadd_price ORDER BY timestamp DESC LIMIT 1";
+            try
+            {
+                var price = cmd.ExecuteScalar();
+                if (price is not null && price is not DBNull)
+                {
+                    stats.NaddPrice = Convert.ToDouble(price);
+                }
+            }
+            catch
+            {
+                // nadd_price table may not exist in older databases
+                stats.NaddPrice = null;
             }
         }
         using (var cmd = connection.CreateCommand())

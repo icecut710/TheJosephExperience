@@ -334,7 +334,7 @@ public partial class MainWindow : Window
         }
 
         StatusHotkey.Text = CurrentHotkeyText(settings);
-        UpdateCoinDisplay();
+        RefreshStatsDisplay();
         UpdateCs2Status();
 
         // Sidebar STATUS section — compact, canonical
@@ -438,19 +438,29 @@ public partial class MainWindow : Window
         };
     }
 
-    private void UpdateCoinDisplay()
+    private void RefreshStatsDisplay()
     {
         try
         {
             var stats = Services.Library?.GetStats();
-            // Coins feature removed - always display 0
-            StatusCoinCount.Text = "0";
-            StatusJosephCoins.Text = "Coins: 0";
+            if (stats is null) return;
+
+            // NADD price
+            StatusNaddPrice.Text = $"NADD: {stats.NaddPrice}";
+            StatusNaddPrice.Opacity = stats.NaddPrice != null ? 1.0 : 0.4;
+
+            // Sounds played
+            StatusSoundsPlayed.Text = stats.SoundsPlayed.ToString("N0");
+
+            // Celebrations today
+            StatusCelebrationsToday.Text = stats.CelebrationsToday.ToString("N0");
         }
         catch
         {
-            StatusCoinCount.Text = "?";
-            StatusJosephCoins.Text = "Coins: ?";
+            StatusNaddPrice.Text = "NADD: --";
+            StatusNaddPrice.Opacity = 0.4;
+            StatusSoundsPlayed.Text = "?";
+            StatusCelebrationsToday.Text = "?";
         }
     }
 
@@ -639,56 +649,17 @@ statsRight.Children.Add(new TextBlock
         Grid.SetColumn(statsRight, 1);
         statsRow.Children.Add(statsRight);
 
-        // NADD coins row
-        var coinsRow = new Grid { Margin = new Thickness(0, 8, 0, 4) };
-        coinsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        coinsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var coinsLeft = new StackPanel { Margin = new Thickness(0, 6, 0, 6) };
-        coinsLeft.Children.Add(new TextBlock
+        // Shawarma lore - subtle
+        var loreText = new TextBlock
         {
-            Text = "Joseph Coins",
+            Text = "Shawarma: Secured",
             FontSize = 9,
             Foreground = (Brush)FindResource("TextMutedBrush"),
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        coinsLeft.Children.Add(new TextBlock
-        {
-            Text = "0",
-            FontSize = 16,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        Grid.SetColumn(coinsLeft, 0);
-        coinsRow.Children.Add(coinsLeft);
-
-        var coinsRight = new StackPanel { Margin = new Thickness(0, 6, 0, 6), VerticalAlignment = VerticalAlignment.Center };
-        coinsRight.Children.Add(new TextBlock
-        {
-            Text = "Sounds Played",
-            FontSize = 9,
-            Foreground = (Brush)FindResource("TextMutedBrush"),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            TextAlignment = System.Windows.TextAlignment.Right
-        });
-        coinsRight.Children.Add(new TextBlock
-        {
-            Text = stats.SoundsPlayed.ToString("N0"),
-            FontSize = 16,
-            FontWeight = FontWeights.Bold,
-            Foreground = (Brush)FindResource("AccentBrush"),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            TextAlignment = System.Windows.TextAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        Grid.SetColumn(coinsRight, 1);
-        coinsRow.Children.Add(coinsRight);
-
-        var statsPanel = new StackPanel();
-        statsPanel.Children.Add(statsRow);
-        statsPanel.Children.Add(coinsRow);
-        statsCard.Child = statsPanel;
-        panel.Children.Add(statsCard);
+            Margin = new Thickness(0, 4, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.7
+        };
+        statsRow.Children.Add(loreText);
 
         page.Children.Add(panel);
         CrossFade(page);
@@ -2470,27 +2441,6 @@ statusCard.Child = statusContent;
             actRangeBar.Children.Add(btn);
         }
         root.Children.Add(actRangeBar);
-
-        // Internal Joseph Coins info
-        root.Children.Add(CreateSectionHeader("JOSEPH COINS"));
-        root.Children.Add(new TextBlock
-        {
-            Text = "These are internal reward points earned from celebrations — NOT the real NADD/SOL token. See the Market section above for real token data.",
-            FontSize = 10.5,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextMutedBrush"),
-            Margin = new Thickness(0, 0, 0, 8)
-        });
-        var coinsCard = CreateCard(16);
-        coinsCard.Child = new TextBlock
-        {
-            Text = $"Sounds Played: {stats.SoundsPlayed:N0}",
-            FontSize = 14,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
-            Margin = new Thickness(12, 12, 12, 12)
-        };
-        root.Children.Add(coinsCard);
 
         scroll.Content = root;
         CrossFade(scroll);

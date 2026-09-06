@@ -195,15 +195,15 @@
                            HorizontalAlignment="Right" VerticalAlignment="Center"
                            Margin="12,0,0,0"/>
 
-                 <!-- Audio status -->
+<!-- Audio status -->
                  <TextBlock Grid.Column="6" x:Name="StatusAudio" Text="Audio: Ready"
                             FontSize="11" Foreground="{StaticResource TextMutedBrush}"
                             Margin="12,0,0,0" VerticalAlignment="Center"
                             ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
-                <!-- Optional: NADD + Coins (collapsible at narrow widths) -->
-                <StackPanel Grid.Column="7" Orientation="Horizontal"
-                             VerticalAlignment="Center" Margin="12,0,0,0">
+                <!-- NADD price -->
+                 <StackPanel Grid.Column="7" Orientation="Horizontal"
+                              VerticalAlignment="Center" Margin="12,0,0,0">
                     <Border x:Name="StatusNaddBadge"
                             Background="#1A3A1A" Opacity="0.75"
                             BorderBrush="#3A7D3A" BorderThickness="1" CornerRadius="4"
@@ -216,32 +216,17 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Margin="6,2,6,2"/>
                     </Border>
-                    <Border x:Name="StatusCoinBadge"
-                            Background="#2A1F4D" Opacity="0.75"
-                            BorderBrush="#4A3F7D" BorderThickness="1" CornerRadius="4"
-                            Width="28" Height="20"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Margin="6,0,0,0"
-                            ToolTip="Joseph Coins - internal reward points (not the real NADD token)">
-                        <TextBlock x:Name="StatusCoinCount" Text="0"
-                                   FontSize="11" FontWeight="Bold"
-                                   Foreground="#FFD700"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <Border x:Name="StatusCoinsBadge"
-                            Background="#1A5F73" Opacity="0.75"
-                            BorderBrush="#3D9970" BorderThickness="1" CornerRadius="4"
-                            Height="20"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Margin="6,0,0,0"
-                            ToolTip="Joseph Coins (internal reward, not real NADD)">
-                        <TextBlock x:Name="StatusJosephCoins" Text="Coins: 0"
-                                   FontSize="10.5" FontWeight="SemiBold"
-                                   Foreground="#FFD700"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Margin="6,2,6,2"/>
-                    </Border>
-                </StackPanel>
+                    <TextBlock x:Name="StatusSoundsPlayed" Text="0"
+                               FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="#FFD700"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="6,2,6,2"/>
+                    <TextBlock x:Name="StatusCelebrationsToday" Text="0"
+                               FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="#FFD700"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="6,2,6,2"/>
+                 </StackPanel>
             </Grid>
         </Border>
 

@@ -38,4 +38,6 @@ public class LibraryStats
     public int ImageCount { get; set; }
     public int EnabledImageCount { get; set; }
     public int SoundsPlayed { get; set; }
+    public double? NaddPrice { get; set; }
+    public int CelebrationsToday { get; set; }
 }

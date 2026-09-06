@@ -259,6 +259,10 @@ public sealed class CounterStrikeIntegrationService : IDisposable
 
     // ------------------------------------------------------------ process monitor
 
+    // ------------------------------------------------------------ process monitor
+
+    private DateTime _lastReconnectUtc = DateTime.MinValue;
+
     [SupportedOSPlatform("windows")]
     private async Task MonitorCs2ProcessAsync()
     {
@@ -267,12 +271,41 @@ public sealed class CounterStrikeIntegrationService : IDisposable
             try
             {
                 var running = Process.GetProcessesByName("cs2").Length > 0;
-                if (running && Freshness is PayloadFreshness.NeverReceived or PayloadFreshness.Stale
+                var fresh = Freshness;
+
+                if (running && fresh is PayloadFreshness.NeverReceived or PayloadFreshness.Stale
                     && State.Phase != CounterStrikeConnectionPhase.ReceivingGameState)
                 {
-                    SetState(CounterStrikeConnectionPhase.Cs2Running,
-                        "CS2 is running but no game state has arrived yet. " +
-                        "Install the GSI config and restart the game.");
+                    // If we were previously receiving game state but it went stale
+                    // while CS2 is still running, try a listener restart with backoff.
+                    if (fresh == PayloadFreshness.Stale && State.Phase == CounterStrikeConnectionPhase.ReceivingGameState
+                        && (DateTime.UtcNow - _lastReconnectUtc).TotalSeconds > 15)
+                    {
+                        AppLog.Info("CS2 GSI: stale connection while CS2 running — attempting listener restart.");
+                        _lastReconnectUtc = DateTime.UtcNow;
+                        _server.Stop();
+                        _previous = null;
+                        _detector.Reset();
+                        var s = _settingsAccessor();
+                        var port = Math.Clamp(s.GameIntegrationPort, 1, 65535);
+                        var token = string.IsNullOrEmpty(s.GameIntegrationAuthToken) ? null : s.GameIntegrationAuthToken;
+                        if (_server.TryStart(port, token, out _))
+                        {
+                            SetState(CounterStrikeConnectionPhase.WaitingForGsi,
+                                $"Listener restarted on http://127.0.0.1:{port}/ — waiting for CS2 to resend game state.");
+                        }
+                        else
+                        {
+                            SetState(CounterStrikeConnectionPhase.PortConflict,
+                                "Listener restart failed — port conflict.");
+                        }
+                    }
+                    else
+                    {
+                        SetState(CounterStrikeConnectionPhase.Cs2Running,
+                            "CS2 is running but no game state has arrived yet. " +
+                            "Install the GSI config and restart the game.");
+                    }
                 }
                 else if (!running && State.Phase == CounterStrikeConnectionPhase.Cs2Running)
                 {

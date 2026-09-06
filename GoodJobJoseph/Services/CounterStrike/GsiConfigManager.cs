@@ -112,10 +112,52 @@ public sealed class GsiConfigManager : IGsiConfigManager
 
     private static string? TryFindInLibrary(string libraryRoot)
     {
+        var common = Path.Combine(libraryRoot, "steamapps", "common");
+
+        // 1) Prefer the appmanifest_730.acf — the authoritative CS2 install record.
+        //    The "installdir" field tells us the real folder name (may differ from
+        //    "Counter-Strike 2" if the user renamed it).
+        var manifest730 = Path.Combine(libraryRoot, "steamapps", "appmanifest_730.acf");
+        if (File.Exists(manifest730))
+        {
+            var installDir = ParseInstallDir(manifest730);
+            if (!string.IsNullOrEmpty(installDir))
+            {
+                var cfg = Path.Combine(common, installDir, "game", "csgo", "cfg");
+                if (Directory.Exists(cfg)) return cfg;
+                // Fallback: the install dir might be the legacy CS:GO layout (no /game/).
+                var cfgLegacy = Path.Combine(common, installDir, "csgo", "cfg");
+                if (Directory.Exists(cfgLegacy)) return cfgLegacy;
+            }
+        }
+
+        // 2) Fall back to directory-name probing.
         foreach (var game in new[] { "Counter-Strike 2", "Counter-Strike Global Offensive" })
         {
-            var cfg = Path.Combine(libraryRoot, "steamapps", "common", game, "game", "csgo", "cfg");
+            var cfg = Path.Combine(common, game, "game", "csgo", "cfg");
             if (Directory.Exists(cfg)) return cfg;
+        }
+        return null;
+    }
+
+    /// <summary>Reads the "installdir" value from a Steam appmanifest .acf file.</summary>
+    private static string? ParseInstallDir(string acfPath)
+    {
+        try
+        {
+            foreach (var line in File.ReadAllLines(acfPath))
+            {
+                if (line.Contains("\"installdir\"", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Lines look like:  "installdir"    "Counter-Strike 2"
+                    var parts = line.Split('"');
+                    if (parts.Length >= 4) return parts[3];
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"GsiConfigManager.ParseInstallDir failed: {ex.Message}");
         }
         return null;
     }
