@@ -1,18 +1,25 @@
 {
-  "version": "2.0.3",
+  "version": "2.0.2",
   "minimumSupportedVersion": "2.0.0",
-  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.3/TheJosephExperience-v2.0.3-win-x64.zip",
-  "sha256": "D64A8F48575D6EB7604BD91B08B4617AE6DFAABDE8EA3EDA1654F5B539353C67",
-  "fileSize": 98000583,
-  "releaseDateUtc": "2026-09-06T04:58:00Z",
+  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.2/TheJosephExperience-v2.0.2-win-x64.zip",
+  "sha256": "1685C3E1AE2B59B73B5B9E23D85DFAAFD5314407C8E64B018441BF4EBB5531E0",
+  "fileSize": 98008130,
+  "releaseDateUtc": "2026-09-06T11:07:00Z",
   "releaseType": "release",
   "mandatory": false,
   "releaseNotes": [
-    "v2.0.3: Zero-lag overlay + fit-mode separation",
-    "Overlay animation performance: keyed render cache + opaque-format fast path (eliminates lag on repeated celebrations)",
-    "Overlay fit modes properly separated: Contain (uniform), Fill Screen (fill + crop), Stretch (fill), Actual Size (native pixels)",
-    "Celebration overlay text: one-line centered with auto-fit font sizing",
-    "Both F2 celebration paths now use the image-ID render cache",
-    "Version 2.0.3"
+    "v2.0.2: Comprehensive UI fix pass",
+    "Fixed blank Hotkeys/Updates settings tabs (missing SecondaryButton style)",
+    "Fixed slider track visibility (only thumb was rendering)",
+    "Fixed NADD price chart rendering (0px width in Auto column)",
+    "Fixed BarChartView label positioning (FormattedText measurement)",
+    "Fixed CreateEnumComboRow generic delegate inference + labelWidth overload",
+    "Fixed OverlayWindow cache Dictionary constructor",
+    "CS2 status bar now updates live via StateChanged event",
+    "Simplified hotkeys to F2 (Celebration) + F8 (Audio Toggle)",
+    "Debounced settings saves (300ms, off-UI-thread)",
+    "Settings scroll resets to top on category switch",
+    "Supabase uploads use configurable upload token",
+    "Version 2.0.2"
   ]
 }
