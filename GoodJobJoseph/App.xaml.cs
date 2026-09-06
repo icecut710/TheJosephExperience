@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -15,7 +16,7 @@ public partial class App : Application
 {
     public static RollingFileLogger Logger = null!;
     public static AppSettingsService? Services;
-    public static readonly string Version = "2.0.3";
+    public static readonly string Version = "2.0.2";
 
     private DatabaseService? _db;
     private SettingsService? _settings;
@@ -80,7 +81,7 @@ using var pipe = new System.IO.Pipes.NamedPipeClientStream(
 
             Logger = new RollingFileLogger(AppPaths.LogsDir);
             AppLog.Initialize(Logger);
-            Logger.Info("Starting The Joseph Experience 2.0 v2.0.0");
+            Logger.Info("Starting The Joseph Experience 2.0 v2.0.2");
 
             try
             {
@@ -144,6 +145,9 @@ using var pipe = new System.IO.Pipes.NamedPipeClientStream(
 
             // Wire up real NADD market data updates to the status bar
             _naddService!.DataUpdated += () => Dispatcher.Invoke(() => _mainWindow.UpdateNaddPrice());
+
+            // Wire the F8 audio-toggle so the user always sees/hears feedback
+            _celebration!.SoundToggleChanged += on => Dispatcher.Invoke(() => _mainWindow?.OnSoundToggleChanged(on));
 
             RegisterHotkey();
 
@@ -225,6 +229,8 @@ using var pipe = new System.IO.Pipes.NamedPipeClientStream(
 
     private async void StartBackgroundSync()
     {
+        // Defer startup so the UI is responsive first on low-end machines.
+        await Task.Delay(TimeSpan.FromSeconds(6)).ConfigureAwait(true);
         try
         {
             await SyncNowAsync(null).ConfigureAwait(true);
@@ -330,6 +336,9 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
     /// <summary>The live Counter-Strike integration (listener + detector + router), or null before first start.</summary>
     internal CounterStrikeIntegrationService? Cs2 => _cs2;
 
+    /// <summary>After the Games page edits a per-event config, push it into the live router without a restart.</summary>
+    internal void RefreshGameEventConfigs() => _cs2?.ReloadEventConfigs();
+
     /// <summary>
     /// One-click installer: locates Counter-Strike 2 / CS:GO on this machine via the
     /// Steam registry and writes the gamestate integration cfg directly into the
@@ -337,13 +346,22 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
     /// </summary>
     internal AttachResult AttachCs2()
     {
+        var s = _settings!.Current;
+
+        // Activating the CS2 setup turns the game integration ON. Games stay
+        // disabled on first launch until the user explicitly attaches/installs.
+        if (!s.GameIntegrationEnabled)
+        {
+            s.GameIntegrationEnabled = true;
+            _settings.Save();
+        }
+
         // Ensure the listener is running with current settings.
         StartGameIntegration();
         var svc = _cs2;
         if (svc is null)
             return new AttachResult(false, "Game integration not initialized.", null);
 
-        var s = _settings!.Current;
         var port = Math.Clamp(s.GameIntegrationPort, 1, 65535);
         var token = string.IsNullOrEmpty(s.GameIntegrationAuthToken) ? null : s.GameIntegrationAuthToken;
 
@@ -359,12 +377,42 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         if (result.Success)
         {
             s.Cs2AttachedUtc = DateTime.UtcNow;
+            s.Cs2Attached = true;
             _settings.Save();
-            // Restart the listener so a changed port/token takes effect immediately.
+            // Restart the listener so a changed port/token/enablement takes effect immediately.
             svc.Restart();
+
+            // CS2 reads GSI configs at launch — a running game won't pick up the
+            // freshly written cfg until it restarts. Say so explicitly.
+            try
+            {
+                var cs2Running = Process.GetProcessesByName("cs2").Length > 0;
+                if (cs2Running)
+                {
+                    var msg = result.Message +
+                              "\n\nCounter-Strike is currently running. Restart the game now so it reads the new configuration.";
+                    return new AttachResult(true, msg, result.CfgFolder);
+                }
+            }
+            catch { /* process enumeration can transiently fail — never block attach */ }
         }
 
         return new AttachResult(result.Success, result.Message, result.CfgFolder);
+    }
+
+    /// <summary>Result object returned by AttachCs2().</summary>
+    internal struct AttachResult
+    {
+        public bool Success { get; }
+        public string Message { get; }
+        public object? CfgFolder { get; }
+
+        public AttachResult(bool success, string message, object? cfgFolder)
+        {
+            Success = success;
+            Message = message;
+            CfgFolder = cfgFolder;
+        }
     }
 
     /// <summary>True when the user has previously attached and the GSI cfg still validates.</summary>

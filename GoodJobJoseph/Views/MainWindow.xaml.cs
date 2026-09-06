@@ -349,7 +349,7 @@ public partial class MainWindow : Window
         NavStatusCs2.Text = StatusCs2.Text;
         NavStatusAudio.Text = settings.PlaySound ? "Audio: On" : "Audio: Off";
         NavStatusHotkey.Text = "Hotkeys: F2 · F8";
-        StatusVersion.Text = "2.0.3";
+        StatusVersion.Text = "2.0.2";
         StatusAudio.Text = settings.PlaySound ? "Audio: On (Press F8 to mute)" : "Audio: Off (Press F8 to enable)";
     }
 
@@ -385,8 +385,6 @@ public partial class MainWindow : Window
 
         if (triggerType.Equals("hotkey", StringComparison.OrdinalIgnoreCase))
             return "Hotkey (F2)";
-        if (triggerType.Equals("secondary", StringComparison.OrdinalIgnoreCase))
-            return "Hotkey (Shift+3)";
         if (triggerType.Equals("button", StringComparison.OrdinalIgnoreCase))
             return "Celebrate Button";
         if (triggerType.Equals("preview", StringComparison.OrdinalIgnoreCase))
@@ -624,7 +622,8 @@ statsRight.Children.Add(new TextBlock
     Foreground = (Brush)FindResource("AccentBrush"),
     VerticalAlignment = VerticalAlignment.Center,
     TextTrimming = TextTrimming.CharacterEllipsis,
-    Margin = new Thickness(0, 4, 0, 0)
+    Margin = new Thickness(0, 4, 0, 0),
+    ToolTip = stats.MostCelebratedJoseph ?? "None yet"
 });
         if (stats.LastCelebration.HasValue)
         {
@@ -4126,7 +4125,7 @@ private FrameworkElement CreatePresetGrid(AppSettings settings)
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var labelTb = CreateFieldLabel(label);
         labelTb.TextWrapping = TextWrapping.Wrap;
-        labelTb.TextTrimming = TextTrimming.CharacterEllipsis;
+        labelTb.TextTrimming = TextTrimming.None;
         Grid.SetColumn(labelTb, 0);
         grid.Children.Add(labelTb);
         var toggle = new CheckBox { Style = (Style)FindResource("ToggleSwitch"), IsChecked = isChecked, VerticalAlignment = VerticalAlignment.Center };
@@ -4193,7 +4192,7 @@ private FrameworkElement CreatePresetGrid(AppSettings settings)
             Foreground = new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)),
             FontSize = 12.5,
             TextWrapping = TextWrapping.Wrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextTrimming = TextTrimming.None,
             VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(tb, 0);

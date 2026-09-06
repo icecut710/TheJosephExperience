@@ -37,6 +37,5 @@ public class LibraryStats
     public DateTime? LastCelebration { get; set; }
     public int ImageCount { get; set; }
     public int EnabledImageCount { get; set; }
-    public int JosephCoins { get; set; }  // Internal reward points (NOT real NADD token)
     public int SoundsPlayed { get; set; }
 }

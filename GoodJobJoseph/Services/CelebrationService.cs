@@ -25,6 +25,9 @@ public class CelebrationService
 
     public event Action<string?>? CelebrationStarted;
 
+    /// <summary>Fired when the F8 audio-toggle hotkey flips the play-sound state.</summary>
+    public event Action<bool>? SoundToggleChanged;
+
     public CelebrationService(ImageLibraryService library, OverlayService overlay,
         AudioService audio, SettingsService settings, HistoryService history,
         SoundLibraryService soundLibrary, DatabaseService db, TrayService? tray = null)
@@ -140,8 +143,6 @@ public class CelebrationService
             $"scale={resolved.ImageScale:0.00} " +
             $"duration={overlaySettings.OverlayDurationMs}ms");
 
-        AwardNaddCoins(settings.Preset);
-
         // Route 3D models.
         if (image.Is3DModel && overlaySettings.Prefer3DModel)
         {
@@ -214,7 +215,9 @@ public class CelebrationService
 
     /// <summary>
     /// Toggles celebration sound on/off via the F8 hotkey.
-    /// Persists the change and stops any currently playing audio when muting.
+    /// Persists the change, previews the selected clip when enabling (audible
+    /// confirmation), stops any currently playing audio when muting, and notifies
+    /// the UI so the toggle is never silent.
     /// </summary>
     public void ToggleAudio()
     {
@@ -226,12 +229,17 @@ public class CelebrationService
         {
             _audio?.StopCurrent();
         }
+        else
+        {
+            _audio?.PreviewSelected(settings);
+        }
 
         var msg = settings.PlaySound
             ? "Celebration sound: ON"
             : "Celebration sound: OFF";
         AppLog.Info(msg);
         _tray?.UpdateSoundStatus(msg);
+        SoundToggleChanged?.Invoke(settings.PlaySound);
     }
 
     /// <summary>
@@ -244,42 +252,10 @@ public class CelebrationService
 
     /// <summary>
     /// Awards Joseph Coins based on the celebration preset used.
-    /// Rarer presets award more coins. Coins persist in app_metadata.
+    // Rarer presets award more coins. Coins persist in app_metadata.
     /// These are INTERNAL reward points, NOT the real NADD/SOL token.
     /// </summary>
-    private void AwardNaddCoins(CelebrationPreset preset)
-    {
-        try
-        {
-            var key = "joseph_coins";
-            var currentStr = _db.GetMetadata(key);
-            var current = 0;
-            if (!string.IsNullOrEmpty(currentStr) && int.TryParse(currentStr, out var parsed))
-                current = parsed;
-
-            var coinsToAward = preset switch
-            {
-                CelebrationPreset.CompletelyRandom => 1,
-                CelebrationPreset.ClassicJoseph => 2,
-                CelebrationPreset.ITWizard => 3,
-                CelebrationPreset.ShawarmaMode => 5,
-                CelebrationPreset.CivicDeployment => 7,
-                CelebrationPreset.MassageChairRecovery => 10,
-                CelebrationPreset.PrinterBossFight => 15,
-                CelebrationPreset.MaximumNaddaf => 50,
-                _ => 1
-            };
-
-            var newTotal = current + coinsToAward;
-            _db.SetMetadata(key, newTotal.ToString());
-            AppLog.Info($"Joseph coins awarded: +{coinsToAward} (preset: {preset}), total: {newTotal}");
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn($"Failed to award Joseph coins: {ex.Message}");
-        }
-    }
-
+    // Coins feature removed - no longer awarded or displayed.
     // ------------------------------------------------------------ game-event integration
 
     /// <summary>True while an overlay is currently on screen.</summary>

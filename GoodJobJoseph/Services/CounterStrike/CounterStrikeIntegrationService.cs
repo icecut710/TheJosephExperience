@@ -48,7 +48,8 @@ public sealed class CounterStrikeIntegrationService : IDisposable
         _server = server ?? new GsiServer();
         _parser = parser ?? new GsiPayloadParser();
         _detector = detector ?? new GameEventDetector();
-        _router = router ?? new GameEventRouter(celebration);
+        _router = router ?? new GameEventRouter(celebration,
+            globalCooldownMs: () => Math.Max(0, _settingsAccessor().GameEventCooldownMs));
         _configManager = configManager ?? new GsiConfigManager();
 
         _server.PayloadReceived += OnPayloadReceived;
@@ -97,6 +98,8 @@ public sealed class CounterStrikeIntegrationService : IDisposable
             MultiKillBehavior = s.MultiKillBehaviorParsed
         });
 
+        ReloadEventConfigs();
+
         if (_server.TryStart(port, token, out var error))
         {
             SetState(CounterStrikeConnectionPhase.WaitingForGsi,
@@ -123,6 +126,21 @@ public sealed class CounterStrikeIntegrationService : IDisposable
         lock (_stateGate) _eventHistory.Clear();
         _server.Stop();
         Start();
+    }
+
+    /// <summary>
+    /// Pushes the persisted per-event configs (Games page dropdowns) onto the live router.
+    /// Safe to call repeatedly: configs not present in settings simply keep their defaults.
+    /// </summary>
+    public void ReloadEventConfigs()
+    {
+        foreach (var kvp in _settingsAccessor().GameEventConfigs)
+        {
+            if (Enum.TryParse<GameEventType>(kvp.Key, true, out var type))
+            {
+                _router.SetConfig(type, kvp.Value);
+            }
+        }
     }
 
     public void Dispose()

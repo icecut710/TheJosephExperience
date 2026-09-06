@@ -352,6 +352,16 @@ public class OverlayService
                 monitor = ResolveIndexMonitor(mode);
                 break;
             case MonitorMode.Primary:
+                // Resolve the REAL primary monitor so the overlay window spans the
+                // full physical screen even when DPI scaling differs across monitors.
+                monitor = NativeMethods.MonitorFromPoint(
+                    new NativeMethods.POINT
+                    {
+                        X = (int)(SystemParameters.PrimaryScreenWidth / 2),
+                        Y = (int)(SystemParameters.PrimaryScreenHeight / 2)
+                    },
+                    NativeMethods.MONITOR_DEFAULTTONEAREST);
+                break;
             default:
                 monitor = IntPtr.Zero;
                 break;

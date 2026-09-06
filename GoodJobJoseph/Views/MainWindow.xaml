@@ -167,10 +167,11 @@
                            Foreground="{StaticResource TextPrimaryBrush}"/>
 
                 <!-- Center: Hotkey -->
-                <TextBlock Grid.Column="2" x:Name="StatusHotkey" Text="F2"
-                           FontSize="12" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextMutedBrush}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                 <TextBlock Grid.Column="2" x:Name="StatusHotkey" Text="F2"
+                            FontSize="12" FontWeight="SemiBold"
+                            Foreground="{StaticResource TextMutedBrush}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
                 <!-- Cloud status -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal"
@@ -184,19 +185,21 @@
                 <!-- CS2 status -->
                 <TextBlock Grid.Column="4" x:Name="StatusCs2" Text="CS2: Disconnected"
                            FontSize="11" Foreground="{StaticResource TextMutedBrush}"
-                           Margin="8,0,0,0" VerticalAlignment="Center"/>
+                           Margin="8,0,0,0" VerticalAlignment="Center"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
                 <!-- Version -->
-                <TextBlock Grid.Column="5" x:Name="StatusVersion" Text="2.0.1"
+                <TextBlock Grid.Column="5" x:Name="StatusVersion" Text="2.0.2"
                            FontSize="11" FontWeight="SemiBold"
                            Foreground="{StaticResource TextMutedBrush}"
                            HorizontalAlignment="Right" VerticalAlignment="Center"
                            Margin="12,0,0,0"/>
 
-                <!-- Audio status -->
-                <TextBlock Grid.Column="6" x:Name="StatusAudio" Text="Audio: Ready"
-                           FontSize="11" Foreground="{StaticResource TextMutedBrush}"
-                           Margin="12,0,0,0" VerticalAlignment="Center"/>
+                 <!-- Audio status -->
+                 <TextBlock Grid.Column="6" x:Name="StatusAudio" Text="Audio: Ready"
+                            FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                            Margin="12,0,0,0" VerticalAlignment="Center"
+                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
                 <!-- Optional: NADD + Coins (collapsible at narrow widths) -->
                 <StackPanel Grid.Column="7" Orientation="Horizontal"
@@ -240,6 +243,17 @@
                     </Border>
                 </StackPanel>
             </Grid>
+        </Border>
+
+        <!-- ===================== TOAST (transient F8 / status feedback) ===================== -->
+        <Border x:Name="Toast" Grid.Row="1"
+                VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                Margin="0,0,20,14" Padding="12,7,12,7" CornerRadius="8"
+                Background="{StaticResource SecondarySurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                IsHitTestVisible="False" Visibility="Collapsed" Opacity="0">
+            <TextBlock x:Name="ToastText" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
         </Border>
     </Grid>
 </Window>

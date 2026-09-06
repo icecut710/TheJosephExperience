@@ -27,9 +27,17 @@ public partial class OverlayWindow : Window
     private RotateTransform? _animRotate;
     private AnimationStyle? _lastRandomStyle;
 
+    // Cached layout inputs so a late-measured window (or a DPI/monitor change)
+    // can re-fit the image instead of leaving the 1600x900 fallback in place.
+    private AppSettings? _lateSettings;
+    private BitmapSource? _lateSource;
+    private double _lateScale;
+    private Rect? _latePlacement;
+
     public OverlayWindow()
     {
         InitializeComponent();
+        SizeChanged += OverlayWindow_SizeChanged;
     }
 
     public void ShowOverlay(BitmapSource? imageSource, AppSettings settings, Action? onCompleted, string? cacheKey = null)
@@ -68,7 +76,8 @@ public partial class OverlayWindow : Window
 
         var effectiveTextMode = resolved?.TextMode ?? settings.TextMode;
         var effectiveQuote = quoteText ?? resolved?.ResolvedQuote ?? settings.CelebrationText;
-        var showText = effectiveTextMode != TextMode.NoText
+        var showText = settings.ShowCelebrationText
+                       && effectiveTextMode != TextMode.NoText
                        && !string.IsNullOrWhiteSpace(effectiveQuote)
                        && settings.TextPosition != TextPosition.Hidden;
 
@@ -208,6 +217,12 @@ public partial class OverlayWindow : Window
     {
         if (source is null) return;
 
+        // Cache the exact layout inputs for re-fit on Late measurement / DPI change.
+        _lateSettings = settings;
+        _lateSource = source;
+        _lateScale = scale;
+        _latePlacement = placement;
+
         var useCenter = settings.ImagePosition == ImagePosition.Center
             || settings.ImagePosition == ImagePosition.ActiveMonitorCenter;
 
@@ -245,9 +260,27 @@ public partial class OverlayWindow : Window
                 JosephImage.Width = source.PixelWidth * customScale;
                 JosephImage.Height = source.PixelHeight * customScale;
             }
+            else if (settings.FitMode == FitMode.Natural)
+            {
+                // Natural must never get clipped by the screen edge. Keep the true
+                // pixel size, but shrink it to the monitor whenever it would overflow,
+                // so the overlay always "fits" the whole screen.
+                double pw = source.PixelWidth;
+                double ph = source.PixelHeight;
+                var maxW = ActualWidth > 0 ? ActualWidth : 1600;
+                var maxH = ActualHeight > 0 ? ActualHeight : 900;
+                if (pw > maxW || ph > maxH)
+                {
+                    var fitScale = Math.Min(maxW / Math.Max(1, pw), maxH / Math.Max(1, ph));
+                    pw *= fitScale;
+                    ph *= fitScale;
+                }
+                JosephImage.Width = pw;
+                JosephImage.Height = ph;
+            }
             else
             {
-                // FillScreen / Contain / Natural / Stretch: let Stretch fill the panel.
+                // FillScreen / Contain / Stretch: let Stretch fill the panel.
                 JosephImage.Width = double.NaN;
                 JosephImage.Height = double.NaN;
             }
@@ -906,6 +939,35 @@ public partial class OverlayWindow : Window
             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style);
             NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_FRAMECHANGED);
         }
+
+        // Guarantee the overlay fills the monitor: once the window is actually
+        // measured (or after any resize/DPI event), re-fit so it never sits on
+        // the 1600x900 fallback or resizes into a partial/overflowing frame.
+        RefitIfNeeded();
+    }
+
+    private void OverlayWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        RefitIfNeeded();
+    }
+
+    /// <summary>
+    /// Re-applies the image layout once the overlay is measured to its real size,
+    /// and whenever its size changes (multi-monitor moves, DPI scaling shifts).
+    /// This guarantees the overlay always fills the whole monitor and never ends
+    /// up "just not fitting" — the image is re-fit to the actual window bounds.
+    /// </summary>
+    private void RefitIfNeeded()
+    {
+        if (!IsVisible || _lateSource is null || _lateSettings is null) return;
+        if (ActualWidth <= 1 || ActualHeight <= 1) return;
+        ApplySizeAndPosition(_lateSettings, _lateSource, _lateScale, _latePlacement);
+    }
+
+    public void ForceReapplySizeAndPosition()
+    {
+        if (_lateSource is null || _lateSettings is null) return;
+        ApplySizeAndPosition(_lateSettings, _lateSource, _lateScale, _latePlacement);
     }
 
     public void ForceComplete()

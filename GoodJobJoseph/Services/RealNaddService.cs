@@ -34,7 +34,7 @@ public class RealNaddService : IDisposable
 
     public RealNaddService()
     {
-        _refreshTimer = new Timer(async _ => await RefreshAsync(), null, TimeSpan.Zero, TimeSpan.FromMinutes(2));
+        _refreshTimer = new Timer(async _ => await RefreshAsync(), null, TimeSpan.FromSeconds(8), TimeSpan.FromMinutes(2));
     }
 
     public async Task RefreshAsync()

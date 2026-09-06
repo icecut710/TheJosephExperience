@@ -64,7 +64,7 @@ public class SettingsService
         s.CustomAudioMaxSeconds = Math.Clamp(s.CustomAudioMaxSeconds, 1, 120);
 
         if (!Enum.IsDefined(s.ImagePosition)) s.ImagePosition = ImagePosition.Center;
-        if (!Enum.IsDefined(s.AnimationStyle)) s.AnimationStyle = AnimationStyle.Pop;
+        if (!Enum.IsDefined(s.AnimationStyle)) s.AnimationStyle = AnimationStyle.None;
         if (!Enum.IsDefined(s.ImageMode)) s.ImageMode = ImageMode.Random;
         if (!Enum.IsDefined(s.MonitorMode)) s.MonitorMode = MonitorMode.Primary;
         if (!Enum.IsDefined(s.TextPosition)) s.TextPosition = TextPosition.BelowImage;

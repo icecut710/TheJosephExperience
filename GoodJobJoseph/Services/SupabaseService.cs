@@ -39,6 +39,27 @@ public class SupabaseConfig
     public string AnonKey { get; set; } = "";
     public string UploadToken { get; set; } = "";
     public string Bucket { get; set; } = "good-job-joseph-images";
+    public string ImagesBucket { get; set; } = "";
+    public string AudioBucket { get; set; } = "";
+
+    /// <summary>Selects the storage bucket for a media type. Falls back to <see cref="Bucket"/>.</summary>
+    public string BucketFor(StorageObjectKey.MediaType mediaType) => mediaType switch
+    {
+        StorageObjectKey.MediaType.Images => string.IsNullOrWhiteSpace(ImagesBucket) ? Bucket : ImagesBucket,
+        StorageObjectKey.MediaType.Audio => string.IsNullOrWhiteSpace(AudioBucket) ? Bucket : AudioBucket,
+        _ => Bucket
+    };
+
+    /// <summary>Selects the storage bucket for a catalog row from its canonical object path (images/… vs audio/…).</summary>
+    public string BucketForPath(string? storagePath)
+    {
+        if (!string.IsNullOrWhiteSpace(storagePath) && storagePath.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.IsNullOrWhiteSpace(AudioBucket) ? Bucket : AudioBucket;
+        }
+        return string.IsNullOrWhiteSpace(ImagesBucket) ? Bucket : ImagesBucket;
+    }
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(Url)
         && !string.IsNullOrWhiteSpace(AnonKey)
@@ -143,6 +164,8 @@ public class SupabaseService : IDisposable
                 case "SUPABASE_SERVICE_ROLE_KEY" when value.Length > 0: cfg.UploadToken = value; break;
                 case "SUPABASE_UPLOAD_TOKEN" when value.Length > 0: cfg.UploadToken = value; break;
                 case "SUPABASE_BUCKET" when value.Length > 0: cfg.Bucket = value; break;
+                case "SUPABASE_IMAGES_BUCKET" when value.Length > 0: cfg.ImagesBucket = value; break;
+                case "SUPABASE_AUDIO_BUCKET" when value.Length > 0: cfg.AudioBucket = value; break;
             }
         }
         return cfg;
@@ -626,7 +649,7 @@ private static string DescribeHttpError(int status)
 
     private async Task DownloadToFileAsync(RemoteImage row, string tempFile, CancellationToken ct)
     {
-        var url = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{Uri.EscapeDataString(row.StoragePath ?? "")}?download=1";
+        var url = $"{Config.Url}/storage/v1/object/{Config.BucketForPath(row.StoragePath)}/{Uri.EscapeDataString(row.StoragePath ?? "")}?download=1";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("apikey", Config.AnonKey);
         request.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
@@ -696,7 +719,7 @@ private static string DescribeHttpError(int status)
         }
     }
 
-    public async Task<SupabaseSyncResult> UploadFileAsync(string localFilePath, string displayName = null, string category = "Cloud", string tags = null)
+    public async Task<SupabaseSyncResult> UploadFileAsync(string localFilePath, string? displayName = null, string category = "Cloud", string? tags = null)
     {
         var result = new SupabaseSyncResult();
         if (!Config.IsConfigured)
@@ -737,7 +760,7 @@ private static string DescribeHttpError(int status)
         // Upload to Supabase storage bucket via the REST object API.
         // Endpoint: POST /storage/v1/object/{bucket}/{path}
         // The object path is a canonical UUID-based key — user filenames are never used in the path.
-         var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
+         var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.BucketFor(StorageObjectKey.MediaType.Images)}/{storagePath}";
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         uploadRequest.Headers.Add("apikey", Config.AnonKey);
         uploadRequest.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
@@ -766,7 +789,7 @@ private static string DescribeHttpError(int status)
             if (!catalogOk)
             {
                 AppLog.Warn($"Supabase: storage uploaded but catalog row insert failed for {displayName ?? displayNameFallback}.");
-                result.Error = $"Storage uploaded but catalog insert failed. Image saved locally for next sync.";
+                result.Error = "The image was uploaded to storage but could not be added to the shared catalog (the server rejected the catalog row). Try again, or check the Supabase project setup.";
             }
 
             // Only insert into local catalog if remote insert succeeded,
@@ -810,11 +833,15 @@ private static string DescribeHttpError(int status)
                 {
                     AppLog.Warn($"Supabase: failed to insert into celebration_images: {dbEx.Message}");
                 }
+                result.Success = true;
+                result.Downloaded = 1; // uploading counts as "synced"
+                AppLog.Info($"Supabase: uploaded {localFilePath} to bucket '{Config.BucketFor(StorageObjectKey.MediaType.Images)}' as {storagePath}");
             }
-
-            result.Success = true;
-            result.Downloaded = 1; // uploading counts as "synced"
-            AppLog.Info($"Supabase: uploaded {localFilePath} to bucket '{Config.Bucket}' as {storagePath}");
+            else
+            {
+                result.Success = false;
+                AppLog.Warn($"Supabase: storage upload succeeded but no catalog entry was created for {Path.GetFileName(localFilePath)}.");
+            }
         }
         catch (Exception ex)
         {
@@ -825,7 +852,7 @@ private static string DescribeHttpError(int status)
         return result;
     }
 
-    public async Task<SupabaseSyncResult> UploadAudioAsync(string localFilePath, string displayName = null)
+    public async Task<SupabaseSyncResult> UploadAudioAsync(string localFilePath, string? displayName = null)
     {
         var result = new SupabaseSyncResult();
         if (!Config.IsConfigured)
@@ -866,7 +893,7 @@ private static string DescribeHttpError(int status)
         // Upload to Supabase storage bucket via the REST object API
         // Endpoint: POST /storage/v1/object/{bucket}/{path}  (the legacy "?upload=true&path=" route is gone)
         // The object path is a canonical UUID-based key.
-        var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
+        var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.BucketFor(StorageObjectKey.MediaType.Audio)}/{storagePath}";
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         uploadRequest.Headers.Add("apikey", Config.AnonKey);
         uploadRequest.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
@@ -894,7 +921,7 @@ private static string DescribeHttpError(int status)
             if (!catalogOk)
             {
                 AppLog.Warn($"Supabase: storage uploaded but catalog row insert failed for audio {displayName ?? displayNameFallback}.");
-                result.Error = $"Storage uploaded but catalog insert failed. Audio saved locally for next sync.";
+                result.Error = "The audio was uploaded to storage but could not be added to the shared catalog (the server rejected the catalog row). Try again, or check the Supabase project setup.";
             }
 
             // Only insert into local catalog if remote insert succeeded,
@@ -937,10 +964,14 @@ private static string DescribeHttpError(int status)
                 {
                     AppLog.Warn($"Supabase: failed to insert audio into celebration_images: {dbEx.Message}");
                 }
+                result.Success = true;
+                AppLog.Info($"Supabase: uploaded audio {localFilePath} to bucket '{Config.BucketFor(StorageObjectKey.MediaType.Audio)}' as {storagePath}");
             }
-
-            result.Success = true;
-            AppLog.Info($"Supabase: uploaded audio {localFilePath} to bucket '{Config.Bucket}' as {storagePath}");
+            else
+            {
+                result.Success = false;
+                AppLog.Warn($"Supabase: audio storage upload succeeded but no catalog entry was created for {Path.GetFileName(localFilePath)}.");
+            }
         }
         catch (Exception ex)
         {

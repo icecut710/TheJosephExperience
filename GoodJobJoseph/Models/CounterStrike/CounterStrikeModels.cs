@@ -208,8 +208,44 @@ public sealed record GsiSnapshot
         };
     }
 }
+/// <summary>Which Joseph source a game event should celebrate with.</summary>
+public enum GameEventCelebrationSource
+{
+    DefaultCelebration,
+    RandomJoseph,
+    SpecificJoseph,
+    SpecificCategory,
+    SpecificPreset,
+    NoCelebration
+}
+
+/// <summary>Which text channel a game event should use.</summary>
+public enum GameEventTextSource
+{
+    JosephAssignedQuote,
+    RandomLoreQuote,
+    GameEventQuote,
+    Custom,
+    None
+}
+
+/// <summary>Per-event configuration: what Joseph shows and what text plays.</summary>
+public sealed class GameEventCelebrationConfig
+{
+    public GameEventCelebrationSource Source { get; set; } = GameEventCelebrationSource.RandomJoseph;
+    public GameEventTextSource TextSource { get; set; } = GameEventTextSource.GameEventQuote;
+    public string? SpecificImageId { get; set; }
+    public string? SpecificCategory { get; set; }
+    public string? SpecificPreset { get; set; }
+    public string? CustomText { get; set; }
+    /// <summary>Minimum ms between celebrations of this event type. 0 = no cooldown.</summary>
+    public int CooldownMs { get; set; }
+    /// <summary>Relative importance for priority arbitration (higher wins).</summary>
+    public int Priority { get; set; }
+}
+
 /// <summary>What happens when events collide while an overlay is already up.</summary>
-public enum GameEventConflictBehavior
+public enum GameEventConflictPolicy
 {
     /// <summary>Higher-priority events replace a running celebration; equal/lower are dropped.</summary>
     ReplaceLowerPriority,

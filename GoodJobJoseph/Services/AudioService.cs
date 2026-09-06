@@ -289,6 +289,26 @@ public class AudioService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Audible confirmation when the user toggles sound ON via the F8 hotkey.
+    /// Resolves the currently selected clip and previews it. Never throws.
+    /// </summary>
+    public void PreviewSelected(AppSettings settings)
+    {
+        try
+        {
+            var clip = ResolveClip(settings, null);
+            if (clip is not null && SoundClip.ExistsSafe(clip.FilePath))
+            {
+                Preview(settings, clip.FilePath);
+            }
+        }
+        catch
+        {
+            // Best effort.
+        }
+    }
+
     public void Stop()
     {
         try

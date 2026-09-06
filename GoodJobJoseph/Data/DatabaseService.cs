@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using JosephExperience.Models;
 
@@ -333,11 +334,6 @@ public class DatabaseService : IDisposable
         }
         using (var cmd = connection.CreateCommand())
         {
-            cmd.CommandText = "SELECT value FROM app_metadata WHERE key = 'joseph_coins'";
-            stats.JosephCoins = Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
-        }
-        using (var cmd = connection.CreateCommand())
-        {
             cmd.CommandText = @"
                 SELECT COALESCE(SUM(times_played), 0) FROM celebration_sounds";
             var soundsResult = cmd.ExecuteScalar();
@@ -369,47 +365,74 @@ public class DatabaseService : IDisposable
     }
 
     /// <summary>
-    /// Returns celebration counts bucketed by hour for chart rendering.
-    /// Only counts entries with non-null shown_at timestamps.
+    /// Returns celebration counts bucketed by time for chart rendering.
+    /// Buckets are aligned to local time, and the grid auto-coarsens
+    /// to keep the chart cheap on low-end machines (<=200 bars).
     /// </summary>
     public List<TimeBucket> GetHistoryBuckets(DateTime sinceUtc, TimeSpan bucketSize)
     {
         var result = new List<TimeBucket>();
+        var ts = bucketSize.TotalSeconds <= 0 ? TimeSpan.FromHours(1) : bucketSize;
+        const int MaxBuckets = 200;
+
+        // Auto-aggregate so long ranges never blow up the UI.
+        var endLocal = DateTime.Now;
+        var startLocal = sinceUtc.ToLocalTime();
+        var window = endLocal - startLocal;
+        var est = (long)Math.Ceiling(window.TotalSeconds / ts.TotalSeconds);
+        if (est > MaxBuckets)
+            ts = TimeSpan.FromTicks((long)(ts.Ticks * (est / MaxBuckets + 1.0)));
+
+        var flooredStart = FloorToBucket(startLocal, ts);
+        var flooredEnd = FloorToBucket(endLocal, ts);
+        var counts = new Dictionary<DateTime, int>();
+
         using var connection = GetConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = @"
-            SELECT strftime('%Y-%m-%dT%H:%M', shown_at) as bucket, COUNT(*) as cnt
-            FROM celebration_history
-            WHERE shown_at IS NOT NULL
-              AND shown_at >= $since
-            GROUP BY strftime('%Y-%m-%dT%H:%M', shown_at)
-            ORDER BY bucket ASC";
-        cmd.Parameters.AddWithValue("$since", sinceUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            SELECT shown_at FROM celebration_history
+            WHERE shown_at IS NOT NULL AND shown_at >= $since
+            ORDER BY shown_at ASC";
+        cmd.Parameters.AddWithValue("$since", sinceUtc.ToString("o"));
         using var reader = cmd.ExecuteReader();
-        var buckets = new Dictionary<DateTime, int>();
         while (reader.Read())
         {
-            if (DateTime.TryParse(reader.GetString(0), out var ts))
-            {
-                var bucket = new DateTime(ts.Year, ts.Month, ts.Day, ts.Hour, 0, 0, DateTimeKind.Utc);
-                buckets[bucket] = buckets.GetValueOrDefault(bucket) + reader.GetInt32(1);
-            }
+            var raw = reader.GetString(0);
+            if (!TryParseUtc(raw, out var utc)) continue;
+            var local = utc.ToLocalTime();
+            var key = FloorToBucket(local, ts);
+            counts[key] = counts.TryGetValue(key, out var c) ? c + 1 : 1;
         }
 
-        // Fill any gaps with zero counts for consistent graph data
-        var current = sinceUtc;
-        var end = DateTime.UtcNow;
-        while (current <= end)
+        for (var t = flooredStart; t <= flooredEnd; t = t.Add(ts))
         {
-            result.Add(new TimeBucket
-            {
-                Timestamp = current,
-                Count = buckets.GetValueOrDefault(current, 0)
-            });
-            current = current.AddHours(1);
+            result.Add(new TimeBucket { Timestamp = t, Count = counts.GetValueOrDefault(t, 0) });
         }
-
         return result;
+    }
+
+    private static bool TryParseUtc(string raw, out DateTime utc)
+    {
+        utc = default;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+        {
+            utc = dto.UtcDateTime;
+            return true;
+        }
+        if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dt))
+        {
+            utc = DateTime.SpecifyKind(dt, DateTimeKind.Local).ToUniversalTime();
+            return true;
+        }
+        return false;
+    }
+
+    private static DateTime FloorToBucket(DateTime t, TimeSpan bucket)
+    {
+        var bucketTicks = bucket.Ticks;
+        if (bucketTicks <= 0) bucketTicks = TimeSpan.TicksPerHour;
+        return new DateTime(t.Ticks - t.Ticks % bucketTicks, t.Kind);
     }
 
     public List<CelebrationImage> GetEligibleImages(bool favoritesOnly)

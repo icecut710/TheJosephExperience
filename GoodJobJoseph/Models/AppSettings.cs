@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using JosephExperience.Models.CounterStrike;
 
 namespace JosephExperience.Models;
 
@@ -320,7 +321,7 @@ public class AppSettings
     public bool TrimTransparentBounds { get; set; } = false;
     public double CustomFitScale { get; set; } = 1.0;
 
-    public AnimationStyle AnimationStyle { get; set; } = AnimationStyle.Fade;
+    public AnimationStyle AnimationStyle { get; set; } = AnimationStyle.None;
     public bool RandomAnimation { get; set; }
     public bool ExcludeJumpscareFromRandom { get; set; } = true;
     public bool ExcludeNoneFromRandom { get; set; } = true;
@@ -330,7 +331,7 @@ public class AppSettings
     public int EntryDurationMs { get; set; } = 0;
     public int ExitDurationMs { get; set; } = 0;
 
-    public bool ShowCelebrationText { get; set; }
+    public bool ShowCelebrationText { get; set; } = false;
     public string CelebrationText { get; set; } = "The Joseph Experience 2.0";
     public TextMode TextMode { get; set; } = TextMode.AssignedQuote;
     public TextFxStyle TextFx { get; set; } = TextFxStyle.Impact;
@@ -459,6 +460,13 @@ public class AppSettings
     public int GameEventCooldownMs { get; set; } = 1200;
     /// <summary>Force a shorter / more transparent overlay for in-game triggers. Manual F2 always uses the full effect.</summary>
     public bool GameEventsLowDistraction { get; set; } = true;
+    /// <summary>
+    /// Per-event celebration configs (source + text pick) keyed by GameEventType name.
+    /// Empty entries fall back to GameEventDefaults. Persisted exactly as edited in the
+    /// Games page so dropdown choices survive restarts.
+    /// </summary>
+    public Dictionary<string, GameEventCelebrationConfig> GameEventConfigs { get; set; } =
+        new(StringComparer.Ordinal);
 
     public AppSettings Clone()
     {

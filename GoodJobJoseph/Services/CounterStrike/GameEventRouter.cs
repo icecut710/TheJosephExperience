@@ -44,48 +44,6 @@ public enum PayloadFreshness
     Stale        // > 10 s
 }
 
-public enum GameEventCelebrationSource
-{
-    DefaultCelebration,
-    RandomJoseph,
-    SpecificJoseph,
-    SpecificCategory,
-    SpecificPreset,
-    NoCelebration
-}
-
-public enum GameEventTextSource
-{
-    JosephAssignedQuote,
-    RandomLoreQuote,
-    GameEventQuote,
-    Custom,
-    None
-}
-
-/// <summary>Per-event configuration: what Joseph shows and what text plays.</summary>
-public sealed class GameEventCelebrationConfig
-{
-    public GameEventCelebrationSource Source { get; set; } = GameEventCelebrationSource.RandomJoseph;
-    public GameEventTextSource TextSource { get; set; } = GameEventTextSource.GameEventQuote;
-    public string? SpecificImageId { get; set; }
-    public string? SpecificCategory { get; set; }
-    public string? SpecificPreset { get; set; }
-    public string? CustomText { get; set; }
-    /// <summary>Minimum ms between celebrations of this event type. 0 = no cooldown.</summary>
-    public int CooldownMs { get; set; }
-    /// <summary>Relative importance for priority arbitration (higher wins).</summary>
-    public int Priority { get; set; }
-}
-
-public enum GameEventConflictPolicy
-{
-    Queue,
-    ReplaceLowerPriority,
-    IgnoreWhileCelebrating,
-    Stack
-}
-
 /// <summary>Per-event default text — the game-event quote channel.</summary>
 public static class GameEventText
 {
@@ -145,7 +103,9 @@ public sealed class GameEventRouter
     private readonly Func<CelebrationService> _celebration;
     private readonly Dictionary<GameEventType, GameEventCelebrationConfig> _configs;
     private readonly Dictionary<GameEventType, DateTime> _lastFiredUtc = new();
+    private readonly Func<int>? _globalCooldownMs;
     private readonly object _gate = new();
+    private DateTime _lastRoutedUtc = DateTime.MinValue;
     private GameEventConflictPolicy _conflictPolicy = GameEventConflictPolicy.ReplaceLowerPriority;
 
     /// <summary>Raised with (event, routed?) for the diagnostics history panel.</summary>
@@ -155,10 +115,12 @@ public sealed class GameEventRouter
 
     public GameEventRouter(
         Func<CelebrationService> celebration,
-        Dictionary<GameEventType, GameEventCelebrationConfig>? configs = null)
+        Dictionary<GameEventType, GameEventCelebrationConfig>? configs = null,
+        Func<int>? globalCooldownMs = null)
     {
         _celebration = celebration;
         _configs = configs ?? new Dictionary<GameEventType, GameEventCelebrationConfig>(GameEventDefaults.Create());
+        _globalCooldownMs = globalCooldownMs;
     }
 
     public void SetConflictPolicy(GameEventConflictPolicy policy) =>
@@ -185,7 +147,20 @@ public sealed class GameEventRouter
                 EventSuppressed?.Invoke(gameEvent, "cooldown");
                 return false;
             }
+
+            // Global anti-spam: minimum gap between ANY routed celebrations (Games page slider).
+            if (_globalCooldownMs is not null)
+            {
+                var gapMs = Math.Max(0, _globalCooldownMs());
+                if (gapMs > 0 && _lastRoutedUtc > DateTime.MinValue &&
+                    (gameEvent.TimestampUtc - _lastRoutedUtc).TotalMilliseconds < gapMs)
+                {
+                    EventSuppressed?.Invoke(gameEvent, "global-cooldown");
+                    return false;
+                }
+            }
             _lastFiredUtc[gameEvent.Type] = gameEvent.TimestampUtc;
+            _lastRoutedUtc = gameEvent.TimestampUtc;
         }
 
         var svc = _celebration();

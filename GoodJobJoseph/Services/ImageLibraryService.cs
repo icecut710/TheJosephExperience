@@ -51,22 +51,23 @@ public class ImageLibraryService
 
     /// <summary>
     /// Returns celebration history bucketed by time range for graph rendering.
-    /// Uses real SQLite history data - no fake values.
+    /// Uses real SQLite history data - no fake values. Bucket sizes are
+    /// chosen per range so charts stay readable and cheap on low-end machines.
     /// </summary>
     public List<TimeBucket> GetHistoryBuckets(HistoryRange range)
     {
         var now = DateTime.UtcNow;
-        var since = range switch
+        var (since, bucket) = range switch
         {
-            HistoryRange.Hours24 => now.AddHours(-24),
-            HistoryRange.Days7 => now.AddDays(-7),
-            HistoryRange.Days30 => now.AddDays(-30),
-            HistoryRange.Days90 => now.AddDays(-90),
-            HistoryRange.All => DateTime.MinValue,
-            _ => now.AddHours(-24)
+            HistoryRange.Hours24 => (now.AddHours(-24), TimeSpan.FromHours(1)),
+            HistoryRange.Days7 => (now.AddDays(-7), TimeSpan.FromHours(6)),
+            HistoryRange.Days30 => (now.AddDays(-30), TimeSpan.FromDays(1)),
+            HistoryRange.Days90 => (now.AddDays(-90), TimeSpan.FromDays(1)),
+            HistoryRange.All => (now.AddDays(-730), TimeSpan.FromDays(1)),
+            _ => (now.AddHours(-24), TimeSpan.FromHours(1))
         };
 
-        return _db.GetHistoryBuckets(since, TimeSpan.FromHours(1));
+        return _db.GetHistoryBuckets(since, bucket);
     }
 
     // ===============================================================
