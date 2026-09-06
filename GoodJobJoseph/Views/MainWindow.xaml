@@ -1,0 +1,245 @@
+<Window x:Class="JosephExperience.Views.MainWindow"
+         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+         Title="The Joseph Experience 2.0"
+          Icon="pack://application:,,,/JosephExperience;component/Assets/AppIcon.ico"
+         Width="940" Height="680"
+        MinWidth="720" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Background="Transparent"
+        AllowsTransparency="True"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        FontFamily="Segoe UI Variable, Segoe UI"
+        FontSize="13"
+        Closing="Window_Closing">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="32"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===================== TITLE BAR ===================== -->
+        <Border x:Name="TitleBar" Grid.Row="0"
+                Background="{StaticResource AccentSoftBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="14,6,14,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7"
+                        Background="{StaticResource AccentBrush}"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="GJ" FontSize="13" FontWeight="ExtraBold"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Grid.Column="1" Text="The Joseph Experience"
+                           FontSize="14" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Left"
+                           Margin="12,0,0,0"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="MinimizeBtn" Style="{StaticResource GhostButton}"
+                            Width="38" Height="32" ToolTip="Minimize"
+                            Click="MinimizeBtn_Click" Margin="0,0,6,0">
+                        <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="CloseBtn" Style="{StaticResource GhostButton}"
+                            Width="38" Height="32" ToolTip="Close"
+                            Click="CloseBtn_Click">
+                        <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== MAIN CONTENT ===================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ===================== SIDEBAR NAVIGATION ===================== -->
+            <Border x:Name="NavPanel" Grid.Column="0"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="0,0,1,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0,12,0,12">
+                    <StackPanel x:Name="NavStack">
+                        <TextBlock Text="NAVIGATION" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   Margin="16,0,16,8" TextOptions.TextFormattingMode="Display"/>
+                        <Button x:Name="NavCelebrate" Tag="Celebration"
+                                Style="{StaticResource NavButtonActive}"
+                                Content="Celebrate" Click="Nav_Click"/>
+                        <Button x:Name="NavLibrary" Tag="Library"
+                                Style="{StaticResource NavButton}"
+                                Content="Library" Click="Nav_Click"/>
+                        <Button x:Name="NavGames" Tag="Games"
+                                Style="{StaticResource NavButton}"
+                                Content="Games" Click="Nav_Click"/>
+                        <Button x:Name="NavSettings" Tag="Settings"
+                                Style="{StaticResource NavButton}"
+                                Content="Settings" Click="Nav_Click"/>
+                        <Button x:Name="NavMarket" Tag="Market"
+                                Style="{StaticResource NavButton}"
+                                Content="Market" Click="Nav_Click"/>
+
+                        <Separator Margin="12,10,12,10"/>
+
+                        <TextBlock Text="STATUS" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   Margin="16,0,16,8" TextOptions.TextFormattingMode="Display"/>
+                         <TextBlock x:Name="NavStatus" FontSize="12"
+                                     Foreground="{StaticResource TextSecondaryBrush}"
+                                     Margin="16,0,16,0" TextWrapping="Wrap"/>
+
+                         <TextBlock x:Name="NavStatusCloud" FontSize="11"
+                                     Foreground="{StaticResource TextMutedBrush}"
+                                     Margin="16,4,16,0" TextWrapping="Wrap"/>
+                         <TextBlock x:Name="NavStatusCs2" FontSize="11"
+                                     Foreground="{StaticResource TextMutedBrush}"
+                                     Margin="16,2,16,0" TextWrapping="Wrap"/>
+                         <TextBlock x:Name="NavStatusAudio" FontSize="11"
+                                     Foreground="{StaticResource TextMutedBrush}"
+                                     Margin="16,2,16,0" TextWrapping="Wrap"/>
+                         <TextBlock x:Name="NavStatusHotkey" FontSize="11"
+                                     Foreground="{StaticResource TextMutedBrush}"
+                                     Margin="16,2,16,0" TextWrapping="Wrap">
+                     </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- ===================== PAGE CONTENT ===================== -->
+            <Border Grid.Column="1" Background="{StaticResource BgBrush}">
+                <ScrollViewer x:Name="ContentScroll"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="24,20,24,16"
+                              Background="Transparent">
+<ContentControl x:Name="ContentHost" Focusable="False"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- ===================== STATUS BAR ===================== -->
+        <Border x:Name="StatusBar" Grid.Row="2"
+                Background="{StaticResource SecondarySurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="0,1,0,0">
+            <Grid Margin="16,4,16,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: App status dot + READY -->
+                <Ellipse Grid.Column="0" x:Name="StatusDot" Width="8" Height="8"
+                         Fill="{StaticResource SuccessBrush}" Margin="0,0,8,0"/>
+                <TextBlock Grid.Column="1" x:Name="StatusText" Text="READY"
+                           FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+
+                <!-- Center: Hotkey -->
+                <TextBlock Grid.Column="2" x:Name="StatusHotkey" Text="F2"
+                           FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <!-- Cloud status -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal"
+                             VerticalAlignment="Center" Margin="8,0">
+                    <Ellipse x:Name="CloudDot" Width="6" Height="6"
+                             Fill="{StaticResource TextMutedBrush}" Margin="0,0,4,0"/>
+                    <TextBlock Text="Cloud" FontSize="11"
+                               Foreground="{StaticResource TextMutedBrush}"/>
+                </StackPanel>
+
+                <!-- CS2 status -->
+                <TextBlock Grid.Column="4" x:Name="StatusCs2" Text="CS2: Disconnected"
+                           FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                           Margin="8,0,0,0" VerticalAlignment="Center"/>
+
+                <!-- Version -->
+                <TextBlock Grid.Column="5" x:Name="StatusVersion" Text="2.0.1"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Margin="12,0,0,0"/>
+
+                <!-- Audio status -->
+                <TextBlock Grid.Column="6" x:Name="StatusAudio" Text="Audio: Ready"
+                           FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                           Margin="12,0,0,0" VerticalAlignment="Center"/>
+
+                <!-- Optional: NADD + Coins (collapsible at narrow widths) -->
+                <StackPanel Grid.Column="7" Orientation="Horizontal"
+                             VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Border x:Name="StatusNaddBadge"
+                            Background="#1A3A1A" Opacity="0.75"
+                            BorderBrush="#3A7D3A" BorderThickness="1" CornerRadius="4"
+                            Height="20"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            ToolTip="Real NADD/SOL token price from GeckoTerminal">
+                        <TextBlock x:Name="StatusNaddPrice" Text="NADD: ..."
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="#5FFB8A"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Margin="6,2,6,2"/>
+                    </Border>
+                    <Border x:Name="StatusCoinBadge"
+                            Background="#2A1F4D" Opacity="0.75"
+                            BorderBrush="#4A3F7D" BorderThickness="1" CornerRadius="4"
+                            Width="28" Height="20"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Margin="6,0,0,0"
+                            ToolTip="Joseph Coins - internal reward points (not the real NADD token)">
+                        <TextBlock x:Name="StatusCoinCount" Text="0"
+                                   FontSize="11" FontWeight="Bold"
+                                   Foreground="#FFD700"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Border x:Name="StatusCoinsBadge"
+                            Background="#1A5F73" Opacity="0.75"
+                            BorderBrush="#3D9970" BorderThickness="1" CornerRadius="4"
+                            Height="20"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Margin="6,0,0,0"
+                            ToolTip="Joseph Coins (internal reward, not real NADD)">
+                        <TextBlock x:Name="StatusJosephCoins" Text="Coins: 0"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="#FFD700"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Margin="6,2,6,2"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

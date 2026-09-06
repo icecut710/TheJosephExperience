@@ -1,0 +1,94 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+<!-- ============================================================= -->
+<!-- PREMIUM DARK PALETTE                                          -->
+<!-- ============================================================= -->
+    <Color x:Key="WindowBgColor">#040508</Color>
+    <Color x:Key="BgColor">#090B0F</Color>
+    <Color x:Key="SurfaceColor">#0D1015</Color>
+    <Color x:Key="ElevatedColor">#11151B</Color>
+    <Color x:Key="SecondarySurfaceColor">#151A22</Color>
+    <Color x:Key="BorderColor">#232A35</Color>
+    <Color x:Key="BorderStrongColor">#2C3540</Color>
+    <Color x:Key="HoverBorderColor">#3A4550</Color>
+    <Color x:Key="TextPrimaryColor">#F2F4F8</Color>
+    <Color x:Key="TextSecondaryColor">#B7BECA</Color>
+    <Color x:Key="TextMutedColor">#7F8896</Color>
+    <Color x:Key="AccentColor">#6E7BFF</Color>
+    <Color x:Key="AccentHoverColor">#7C89FF</Color>
+    <Color x:Key="AccentDarkColor">#5A65CC</Color>
+    <Color x:Key="AccentSoftColor">#1A1E30</Color>
+    <Color x:Key="SuccessColor">#55C990</Color>
+    <Color x:Key="SuccessSoftColor">#1F3A32</Color>
+    <Color x:Key="WarningColor">#D6A34B</Color>
+    <Color x:Key="WarningSoftColor">#2F2A1A</Color>
+    <Color x:Key="DangerColor">#D95E67</Color>
+    <Color x:Key="DangerDarkColor">#B04A52</Color>
+    <Color x:Key="DangerSoftColor">#2A1517</Color>
+    <Color x:Key="HoverColor">#161B22</Color>
+    <Color x:Key="PressColor">#1E252E</Color>
+    <Color x:Key="ContextMenuBgColor">#0D1116</Color>
+    <Color x:Key="MenuItemIconColor">#6E7BFF</Color>
+    <Color x:Key="SeparatorColor">#2C3540</Color>
+
+    <!-- Input / Card states -->
+    <Color x:Key="InputBgColor">#252932</Color>
+    <Color x:Key="InputFocusColor">#3A4550</Color>
+    <Color x:Key="PlaceholderColor">#7F8896</Color>
+    <Color x:Key="SashColor">#3A4550</Color>
+    <Color x:Key="SashHoverColor">#4A5568</Color>
+    <Color x:Key="DividerColor">#232A35</Color>
+
+    <!-- Elevated states -->
+    <Color x:Key="CardSelectedColor">#1A3A24</Color>
+    <Color x:Key="HighEmphasisColor">#666E7BFF</Color>
+    <Color x:Key="MediumEmphasisColor">#336E7BFF</Color>
+    <Color x:Key="LowEmphasisColor">#1A6E7BFF</Color>
+
+    <!-- Solid Brushes -->
+    <SolidColorBrush x:Key="WindowBgBrush" Color="{StaticResource WindowBgColor}"/>
+    <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
+    <SolidColorBrush x:Key="ElevatedBrush" Color="{StaticResource ElevatedColor}"/>
+    <SolidColorBrush x:Key="SecondarySurfaceBrush" Color="{StaticResource SecondarySurfaceColor}"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}"/>
+    <SolidColorBrush x:Key="HoverBorderBrush" Color="{StaticResource HoverBorderColor}"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="AccentDarkBrush" Color="{StaticResource AccentDarkColor}"/>
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource AccentSoftColor}"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}"/>
+    <SolidColorBrush x:Key="SuccessSoftBrush" Color="{StaticResource SuccessSoftColor}"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}"/>
+    <SolidColorBrush x:Key="WarningSoftBrush" Color="{StaticResource WarningSoftColor}"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}"/>
+    <SolidColorBrush x:Key="DangerDarkBrush" Color="{StaticResource DangerDarkColor}"/>
+    <SolidColorBrush x:Key="DangerSoftBrush" Color="{StaticResource DangerSoftColor}"/>
+    <SolidColorBrush x:Key="HoverBrush" Color="{StaticResource HoverColor}"/>
+    <SolidColorBrush x:Key="PressBrush" Color="{StaticResource PressColor}"/>
+    <SolidColorBrush x:Key="ContextMenuBgBrush" Color="{StaticResource ContextMenuBgColor}"/>
+    <SolidColorBrush x:Key="MenuItemIconBrush" Color="{StaticResource MenuItemIconColor}"/>
+    <SolidColorBrush x:Key="SeparatorBrush" Color="{StaticResource SeparatorColor}"/>
+
+    <!-- Input & Card brushes -->
+    <SolidColorBrush x:Key="CardBrush" Color="{StaticResource SurfaceColor}"/>
+    <SolidColorBrush x:Key="InputBgBrush" Color="{StaticResource InputBgColor}"/>
+    <SolidColorBrush x:Key="InputFocusBorderBrush" Color="{StaticResource InputFocusColor}"/>
+    <SolidColorBrush x:Key="PlaceholderBrush" Color="{StaticResource PlaceholderColor}"/>
+    <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource DividerColor}"/>
+    <SolidColorBrush x:Key="CardSelectedBrush" Color="{StaticResource CardSelectedColor}"/>
+    <SolidColorBrush x:Key="HighEmphasisBrush" Color="{StaticResource HighEmphasisColor}"/>
+    <SolidColorBrush x:Key="MediumEmphasisBrush" Color="{StaticResource MediumEmphasisColor}"/>
+    <SolidColorBrush x:Key="LowEmphasisBrush" Color="{StaticResource LowEmphasisColor}"/>
+
+    <!-- Aliases used by code -->
+    <SolidColorBrush x:Key="BgAltBrush" Color="{StaticResource SurfaceColor}"/>
+    <SolidColorBrush x:Key="TextSubtleBrush" Color="#5B616A"/>
+    <SolidColorBrush x:Key="AccentGlowBrush" Color="#6E7BFF" Opacity="0.15"/>
+
+</ResourceDictionary>
