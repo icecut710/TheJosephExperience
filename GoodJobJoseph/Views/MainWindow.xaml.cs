@@ -1651,7 +1651,7 @@ statsRight.Children.Add(new TextBlock
 
         var marketGrid = new Grid();
         marketGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        marketGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        marketGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var marketInfo = new StackPanel { Margin = new Thickness(12, 12, 0, 12) };
         marketInfo.Children.Add(new TextBlock
@@ -1737,15 +1737,18 @@ statsRight.Children.Add(new TextBlock
         marketGrid.Children.Add(marketInfo);
 
         // Price chart
+        var chartContainer = new Grid();
+        Grid.SetColumn(chartContainer, 1);
+        marketGrid.Children.Add(chartContainer);
+
         if (nadd?.OhlcvData is not null && nadd.OhlcvData.Count > 1)
         {
-            var chart = new BarChartView { Height = 160 };
+            var chart = new BarChartView { Height = 160, HorizontalAlignment = HorizontalAlignment.Stretch };
             var closes = nadd.OhlcvData.Select(p => p.Close).ToList();
             var timeLabels = nadd.OhlcvData.Select(p => p.Timestamp.ToString("HH:mm")).ToList();
             chart.SetPriceData(closes, timeLabels);
             chart.Margin = new Thickness(0, 0, 12, 0);
-            Grid.SetColumn(chart, 1);
-            marketGrid.Children.Add(chart);
+            chartContainer.Children.Add(chart);
         }
 
         marketCard.Child = marketGrid;
@@ -1767,11 +1770,12 @@ statsRight.Children.Add(new TextBlock
             btn.Click += async (_, _) =>
             {
                 var data = await Services.NaddService?.FetchOhlcvRangeAsync(r) ?? new();
-                var chart = new BarChartView { Height = 160 };
+                var chart = new BarChartView { Height = 160, HorizontalAlignment = HorizontalAlignment.Stretch };
                 var closes = data.Select(p => p.Close).ToList();
                 var timeLabels = data.Select(p => p.Timestamp.ToString("g")).ToList();
                 chart.SetPriceData(closes, timeLabels);
-                marketCard.Child = chart;
+                chartContainer.Children.Clear();
+                chartContainer.Children.Add(chart);
             };
             rangeBar.Children.Add(btn);
         }
