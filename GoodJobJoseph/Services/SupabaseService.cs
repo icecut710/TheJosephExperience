@@ -51,7 +51,7 @@ public class SupabaseConfig
 /// Remote canonical image library backed by Supabase.
 ///
 /// Postgres table <c>public.celebration_images</c> is the single canonical source of
-/// truth; Storage bucket <c>joseph-images</c> holds the actual images. The desktop
+/// truth; Storage bucket <c>good-job-joseph-images</c> holds the actual images. The desktop
 /// client reads <c>enabled</c> and <c>deleted_at IS NULL</c> rows via the anon key
 /// (read-only, RLS-restricted). Downloaded objects are cached under the library cache
 /// directory. Reconciliation deactivates any local cloud mirror whose remote row is
@@ -766,46 +766,50 @@ private static string DescribeHttpError(int status)
             if (!catalogOk)
             {
                 AppLog.Warn($"Supabase: storage uploaded but catalog row insert failed for {displayName ?? displayNameFallback}.");
-                // Still insert locally so the image appears in the library
+                result.Error = $"Storage uploaded but catalog insert failed. Image saved locally for next sync.";
             }
 
-            // Insert row into celebration_images so the catalog sync picks it up
-            var image = new CelebrationImage
+            // Only insert into local catalog if remote insert succeeded,
+            // otherwise the sync cycle will pick up the row on next run.
+            if (catalogOk)
             {
-                Id = Guid.NewGuid().ToString(),
-                DisplayName = displayName ?? displayNameFallback,
-                FileName = Path.GetFileName(localFilePath),
-                FilePath = localFilePath,
-                Category = category,
-                Tags = tags,
-                Enabled = true,
-                Favorite = false,
-                Weight = 1,
-                Sha256 = sha256,
-                RemoteId = remoteId,
-                StoragePath = storagePath,
-                RemoteUpdatedAt = now,
-                LastSyncedAt = now,
-                MimeType = $"image/{ext.TrimStart('.')}",
-                FileSize = fileBytes.Length,
-                Width = 0,
-                Height = 0,
-                Health = AssetHealth.Ready,
-                IsLocalOnly = false
-            };
+                // Insert row into celebration_images so the catalog sync picks it up
+                var image = new CelebrationImage
+                {
+                    Id = remoteId,
+                    DisplayName = displayName ?? displayNameFallback,
+                    FileName = Path.GetFileName(localFilePath),
+                    FilePath = localFilePath,
+                    Category = category,
+                    Tags = tags,
+                    Enabled = true,
+                    Favorite = false,
+                    Weight = 1,
+                    Sha256 = sha256,
+                    RemoteId = remoteId,
+                    StoragePath = storagePath,
+                    RemoteUpdatedAt = now,
+                    LastSyncedAt = now,
+                    MimeType = $"image/{ext.TrimStart('.')}",
+                    FileSize = fileBytes.Length,
+                    Width = 0,
+                    Height = 0,
+                    Health = AssetHealth.Ready,
+                    IsLocalOnly = false
+                };
 
-            // Insert into local SQLite catalog
-            try
-            {
-                var db = new DatabaseService(AppPaths.DatabasePath);
-                db.Initialize();
-                db.InsertImage(image);
-                AppLog.Info($"Supabase: inserted image {image.Id} ({image.DisplayName}) into celebration_images.");
-            }
-            catch (Exception dbEx)
-            {
-                AppLog.Warn($"Supabase: failed to insert into celebration_images: {dbEx.Message}");
-                // Not critical - the image is still in storage, just won't appear in catalog until manually added
+                // Insert into local SQLite catalog
+                try
+                {
+                    var db = new DatabaseService(AppPaths.DatabasePath);
+                    db.Initialize();
+                    db.InsertImage(image);
+                    AppLog.Info($"Supabase: inserted image {image.Id} ({image.DisplayName}) into celebration_images.");
+                }
+                catch (Exception dbEx)
+                {
+                    AppLog.Warn($"Supabase: failed to insert into celebration_images: {dbEx.Message}");
+                }
             }
 
             result.Success = true;
@@ -890,43 +894,49 @@ private static string DescribeHttpError(int status)
             if (!catalogOk)
             {
                 AppLog.Warn($"Supabase: storage uploaded but catalog row insert failed for audio {displayName ?? displayNameFallback}.");
+                result.Error = $"Storage uploaded but catalog insert failed. Audio saved locally for next sync.";
             }
 
-            var image = new CelebrationImage
+            // Only insert into local catalog if remote insert succeeded,
+            // otherwise the sync cycle will pick up the row on next run.
+            if (catalogOk)
             {
-                Id = audioId,
-                DisplayName = displayName ?? displayNameFallback,
-                FileName = Path.GetFileName(localFilePath),
-                FilePath = localFilePath,
-                Category = "Audio",
-                Tags = null,
-                Enabled = true,
-                Favorite = false,
-                Weight = 1,
-                Sha256 = sha256,
-                RemoteId = audioId,
-                StoragePath = storagePath,
-                RemoteUpdatedAt = now,
-                LastSyncedAt = now,
-                MimeType = mimeType,
-                FileSize = fileBytes.Length,
-                Width = 0,
-                Height = 0,
-                Health = AssetHealth.Ready,
-                IsLocalOnly = false
-            };
+                var image = new CelebrationImage
+                {
+                    Id = audioId,
+                    DisplayName = displayName ?? displayNameFallback,
+                    FileName = Path.GetFileName(localFilePath),
+                    FilePath = localFilePath,
+                    Category = "Audio",
+                    Tags = null,
+                    Enabled = true,
+                    Favorite = false,
+                    Weight = 1,
+                    Sha256 = sha256,
+                    RemoteId = audioId,
+                    StoragePath = storagePath,
+                    RemoteUpdatedAt = now,
+                    LastSyncedAt = now,
+                    MimeType = mimeType,
+                    FileSize = fileBytes.Length,
+                    Width = 0,
+                    Height = 0,
+                    Health = AssetHealth.Ready,
+                    IsLocalOnly = false
+                };
 
-            // Insert into local SQLite catalog
-            try
-            {
-                var db = new DatabaseService(AppPaths.DatabasePath);
-                db.Initialize();
-                db.InsertImage(image);
-                AppLog.Info($"Supabase: inserted audio {audioId} ({image.DisplayName}) into celebration_images.");
-            }
-            catch (Exception dbEx)
-            {
-                AppLog.Warn($"Supabase: failed to insert audio into celebration_images: {dbEx.Message}");
+                // Insert into local SQLite catalog
+                try
+                {
+                    var db = new DatabaseService(AppPaths.DatabasePath);
+                    db.Initialize();
+                    db.InsertImage(image);
+                    AppLog.Info($"Supabase: inserted audio {audioId} ({image.DisplayName}) into celebration_images.");
+                }
+                catch (Exception dbEx)
+                {
+                    AppLog.Warn($"Supabase: failed to insert audio into celebration_images: {dbEx.Message}");
+                }
             }
 
             result.Success = true;

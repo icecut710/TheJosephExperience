@@ -23,9 +23,9 @@
                     RenderTransformOrigin="0.5,0.5"
                    RenderOptions.BitmapScalingMode="LowQuality"
                    RenderOptions.EdgeMode="Aliased"
-                   Stretch="Uniform"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
+                   Stretch="Fill"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"/>
             <Border x:Name="GlowBorder" Background="Transparent" Opacity="0"
                      CornerRadius="20" Margin="0,0,0,30"
                      BorderBrush="{StaticResource AccentGlowBrush}"
