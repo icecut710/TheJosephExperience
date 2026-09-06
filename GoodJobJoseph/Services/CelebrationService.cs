@@ -213,6 +213,28 @@ public class CelebrationService
     private int _currentSoundIndex = -1;
 
     /// <summary>
+    /// Toggles celebration sound on/off via the F8 hotkey.
+    /// Persists the change and stops any currently playing audio when muting.
+    /// </summary>
+    public void ToggleAudio()
+    {
+        var settings = _settings.Current;
+        settings.PlaySound = !settings.PlaySound;
+        _settings.Save();
+
+        if (!settings.PlaySound)
+        {
+            _audio?.StopCurrent();
+        }
+
+        var msg = settings.PlaySound
+            ? "Celebration sound: ON"
+            : "Celebration sound: OFF";
+        AppLog.Info(msg);
+        _tray?.UpdateSoundStatus(msg);
+    }
+
+    /// <summary>
     /// Stops any currently playing celebration audio.
     /// </summary>
     public void StopAudio()

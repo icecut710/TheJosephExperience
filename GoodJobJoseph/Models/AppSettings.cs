@@ -394,13 +394,11 @@ public class AppSettings
     public AudioMaxDuration AudioMaxDuration { get; set; } = AudioMaxDuration.Seconds30;
     public int CustomAudioMaxSeconds { get; set; } = 30;
 
-    public HotkeyBinding SoundCycleHotkey { get; set; } = new() { VirtualKey = 0x77, KeyName = "F8" };
-    public HotkeyBinding StopAudioHotkey { get; set; } = new(); // unassigned by default
+    public HotkeyBinding AudioToggleHotkey { get; set; } = new() { VirtualKey = 0x77, KeyName = "F8" };
     public bool PreviewSoundWhenCycling { get; set; } = true;
-    public HotkeyBinding SecondaryCelebrationHotkey { get; set; } = new();
 
     public SyncFrequency SyncFrequency { get; set; } = SyncFrequency.OnStartup;
-    public string UpdateManifestUrl { get; set; } = "https://raw.githubusercontent.com/icecot710/TheJosephExperience/master/updates/update-manifest.json";
+    public string UpdateManifestUrl { get; set; } = "https://raw.githubusercontent.com/icecut710/TheJosephExperience/master/updates/update-manifest.json";
     public bool SyncOnStartup { get; set; } = true;
     public GridDensity GridDensity { get; set; } = GridDensity.Normal;
     public LibrarySortMode LibrarySort { get; set; } = LibrarySortMode.Name;
@@ -473,12 +471,8 @@ public class AppSettings
         {
             JosephExperience.Services.HotkeyAction.Celebration =>
                 new HotkeyBinding { ModifierValue = HotkeyModifierValue, VirtualKey = HotkeyVirtualKey, KeyName = HotkeyKeyName },
-            JosephExperience.Services.HotkeyAction.SecondaryCelebration =>
-                SecondaryCelebrationHotkey,
-            JosephExperience.Services.HotkeyAction.CycleSound =>
-                SoundCycleHotkey,
-            JosephExperience.Services.HotkeyAction.StopAudio =>
-                StopAudioHotkey,
+            JosephExperience.Services.HotkeyAction.AudioToggle =>
+                AudioToggleHotkey,
             _ => new HotkeyBinding(),
         };
     }

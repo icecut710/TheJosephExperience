@@ -6,7 +6,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "2.0.1",
+    [string]$Version = "2.0.2",
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     [switch]$SelfContained
@@ -115,8 +115,7 @@ THE JOSEPH EXPERIENCE
 1. Extract this entire folder.
 2. Double-click JosephExperience.exe.
 3. Press F2 to celebrate.
-4. Press Shift+3 for a secondary celebration.
-5. Press F8 to cycle celebration sounds.
+4. Press F8 to toggle celebration sounds on/off.
 
 Good Job, Joseph!
 Version $Version

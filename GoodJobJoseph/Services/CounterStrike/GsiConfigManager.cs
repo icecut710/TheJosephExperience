@@ -267,8 +267,19 @@ public sealed class GsiConfigManager : IGsiConfigManager
             File.Delete(probe);
             return true;
         }
-        catch
+        catch (UnauthorizedAccessException)
         {
+            AppLog.Warn($"GsiConfigManager.CanWrite: UnauthorizedAccessException writing to {dir}");
+            return false;
+        }
+        catch (IOException ex)
+        {
+            AppLog.Warn($"GsiConfigManager.CanWrite: IOException writing to {dir}: {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"GsiConfigManager.CanWrite: unexpected error writing to {dir}: {ex.Message}");
             return false;
         }
     }

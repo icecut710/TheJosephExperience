@@ -37,12 +37,14 @@ public class SupabaseConfig
 {
     public string Url { get; set; } = "";
     public string AnonKey { get; set; } = "";
-        public string Bucket { get; set; } = "good-job-joseph-images";
+    public string UploadToken { get; set; } = "";
+    public string Bucket { get; set; } = "good-job-joseph-images";
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(Url)
         && !string.IsNullOrWhiteSpace(AnonKey)
         && !Url.StartsWith("your-suppabase", StringComparison.OrdinalIgnoreCase)
         && !AnonKey.StartsWith("your-anon", StringComparison.OrdinalIgnoreCase);
+    public bool CanUpload => IsConfigured && !string.IsNullOrWhiteSpace(UploadToken);
 }
 
 /// <summary>
@@ -138,6 +140,8 @@ public class SupabaseService : IDisposable
                 case "SUPABASE_URL" when value.Length > 0: cfg.Url = value.TrimEnd('/'); break;
                 case "SUPABASE_ANON_KEY" when value.Length > 0: cfg.AnonKey = value; break;
                 case "SUPABASE_PUBLISHABLE_KEY" when value.Length > 0: cfg.AnonKey = value; break;
+                case "SUPABASE_SERVICE_ROLE_KEY" when value.Length > 0: cfg.UploadToken = value; break;
+                case "SUPABASE_UPLOAD_TOKEN" when value.Length > 0: cfg.UploadToken = value; break;
                 case "SUPABASE_BUCKET" when value.Length > 0: cfg.Bucket = value; break;
             }
         }
@@ -637,6 +641,61 @@ private static string DescribeHttpError(int status)
         }
     }
 
+    /// <summary>
+    /// Inserts a row into the remote <c>celebration_images</c> catalog table via
+    /// the PostgREST REST API. Uses the service role key to bypass RLS.
+    /// Returns true on success, false on failure (logged but not thrown).
+    /// </summary>
+    private async Task<bool> InsertCatalogRowAsync(
+        string remoteId, string displayName, string storagePath,
+        string category, string? tags, string sha256,
+        string mimeType, long fileSize, string now)
+    {
+        try
+        {
+            var catalogUrl = $"{Config.Url}/rest/v1/celebration_images";
+            using var request = new HttpRequestMessage(HttpMethod.Post, catalogUrl);
+            request.Headers.Add("apikey", Config.AnonKey);
+            request.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
+            request.Headers.Add("Prefer", "return=minimal");
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["id"] = remoteId,
+                ["display_name"] = displayName,
+                ["storage_path"] = storagePath,
+                ["category"] = category,
+                ["tags"] = tags,
+                ["enabled"] = true,
+                ["favorite"] = false,
+                ["weight"] = 1,
+                ["sha256"] = sha256,
+                ["mime_type"] = mimeType,
+                ["file_size"] = fileSize,
+                ["created_at"] = now,
+                ["updated_at"] = now
+            };
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = false });
+            request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            using var response = await Http.SendAsync(request).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                AppLog.Info($"Supabase: catalog row inserted for {displayName} (id={remoteId}).");
+                return true;
+            }
+
+            var err = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AppLog.Warn($"Supabase: catalog insert failed ({(int)response.StatusCode}): {err}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Supabase: catalog insert error: {ex.Message}");
+            return false;
+        }
+    }
+
     public async Task<SupabaseSyncResult> UploadFileAsync(string localFilePath, string displayName = null, string category = "Cloud", string tags = null)
     {
         var result = new SupabaseSyncResult();
@@ -644,6 +703,11 @@ private static string DescribeHttpError(int status)
         {
             State = SupabaseState.NotConfigured;
             result.Error = "Supabase is not configured. Add a .env file (see .env.example).";
+            return result;
+        }
+        if (!Config.CanUpload)
+        {
+            result.Error = "Supabase upload token not configured. Add SUPABASE_SERVICE_ROLE_KEY to .env.";
             return result;
         }
 
@@ -673,10 +737,10 @@ private static string DescribeHttpError(int status)
         // Upload to Supabase storage bucket via the REST object API.
         // Endpoint: POST /storage/v1/object/{bucket}/{path}
         // The object path is a canonical UUID-based key — user filenames are never used in the path.
-        var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
+         var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         uploadRequest.Headers.Add("apikey", Config.AnonKey);
-        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
+        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
         var mimeType = StorageObjectKey.GetMimeType(StorageObjectKey.MediaType.Images, ext);
         uploadRequest.Content = new ByteArrayContent(fileBytes);
         uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
@@ -693,9 +757,19 @@ private static string DescribeHttpError(int status)
                 return result;
             }
 
-            // Insert row into celebration_images so the catalog sync picks it up
-            var storageUri = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
+            // Insert row into the remote celebration_images catalog via REST API
+            // (uses the service role key to bypass RLS for inserts).
             var now = DateTime.UtcNow.ToString("o");
+            var remoteId = Guid.NewGuid().ToString();
+            var catalogOk = await InsertCatalogRowAsync(remoteId, displayName ?? displayNameFallback,
+                storagePath, category, tags, sha256, mimeType, fileBytes.Length, now).ConfigureAwait(false);
+            if (!catalogOk)
+            {
+                AppLog.Warn($"Supabase: storage uploaded but catalog row insert failed for {displayName ?? displayNameFallback}.");
+                // Still insert locally so the image appears in the library
+            }
+
+            // Insert row into celebration_images so the catalog sync picks it up
             var image = new CelebrationImage
             {
                 Id = Guid.NewGuid().ToString(),
@@ -708,7 +782,7 @@ private static string DescribeHttpError(int status)
                 Favorite = false,
                 Weight = 1,
                 Sha256 = sha256,
-                RemoteId = Guid.NewGuid().ToString(),
+                RemoteId = remoteId,
                 StoragePath = storagePath,
                 RemoteUpdatedAt = now,
                 LastSyncedAt = now,
@@ -756,6 +830,11 @@ private static string DescribeHttpError(int status)
             result.Error = "Supabase is not configured. Add a .env file (see .env.example).";
             return result;
         }
+        if (!Config.CanUpload)
+        {
+            result.Error = "Supabase upload token not configured. Add SUPABASE_SERVICE_ROLE_KEY to .env.";
+            return result;
+        }
 
         var fileInfo = new FileInfo(localFilePath);
         if (!fileInfo.Exists)
@@ -786,7 +865,7 @@ private static string DescribeHttpError(int status)
         var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         uploadRequest.Headers.Add("apikey", Config.AnonKey);
-        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
+        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
         var mimeType = StorageObjectKey.GetMimeType(StorageObjectKey.MediaType.Audio, ext);
         uploadRequest.Content = new ByteArrayContent(fileBytes);
         uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
@@ -803,10 +882,15 @@ private static string DescribeHttpError(int status)
                 return result;
             }
 
-            // Insert row into celebration_images with category="Audio"
-            var storageUri = $"{Config.Url}/storage/v1/object/{Config.Bucket}/{storagePath}";
+            // Insert row into the remote celebration_images catalog via REST API
             var now = DateTime.UtcNow.ToString("o");
             var audioId = Guid.NewGuid().ToString();
+            var catalogOk = await InsertCatalogRowAsync(audioId, displayName ?? displayNameFallback,
+                storagePath, "Audio", null, sha256, mimeType, fileBytes.Length, now).ConfigureAwait(false);
+            if (!catalogOk)
+            {
+                AppLog.Warn($"Supabase: storage uploaded but catalog row insert failed for audio {displayName ?? displayNameFallback}.");
+            }
 
             var image = new CelebrationImage
             {

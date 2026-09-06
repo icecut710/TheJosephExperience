@@ -3,6 +3,7 @@ using System.Windows.Input;
 using JosephExperience.Data;
 using JosephExperience.Models;
 using JosephExperience.Utilities;
+using JosephExperience.Services;
 
 namespace JosephExperience.Tests;
 
@@ -74,6 +75,26 @@ public class HotkeyConverterTests
         var s = new AppSettings();
         Assert.Equal(0x71u, s.HotkeyVirtualKey);
         Assert.Equal("F2", s.HotkeyKeyName);
+    }
+
+    [Fact]
+    public void GetDefaultBinding_AudioToggle_IsF8()
+    {
+        var b = HotkeyConverter.GetDefaultBinding(HotkeyAction.AudioToggle);
+        Assert.Equal(0u, b.ModifierValue);
+        Assert.Equal(0x77u, b.VirtualKey);
+        Assert.Equal("F8", b.KeyName);
+    }
+
+    [Fact]
+    public void HotkeyAction_Enum_HasOnlyCelebrationAndAudioToggle()
+    {
+        var names = Enum.GetNames<HotkeyAction>();
+        Assert.Contains("Celebration", names);
+        Assert.Contains("AudioToggle", names);
+        Assert.DoesNotContain("SecondaryCelebration", names);
+        Assert.DoesNotContain("CycleSound", names);
+        Assert.DoesNotContain("StopAudio", names);
     }
 }
 

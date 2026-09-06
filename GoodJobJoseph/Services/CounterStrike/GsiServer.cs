@@ -25,6 +25,12 @@ public interface IGsiServer : IDisposable
 public sealed class GsiServer : IGsiServer
 {
     private const long MaxPayloadBytes = 2 * 1024 * 1024; // real GSI payloads are a few KB.
+    // Port range we are willing to try (avoid well-known ports 1024-49151 which are
+    // typically reserved/static; the dynamic/private range 49152-65535 is recommended
+    // by IANA for short-lived apps. If the user sets a port outside this range we
+    // still attempt it but log a warning.
+    private static readonly int MinDynamicPort = 49152;
+    private static readonly int MaxDynamicPort = 65535;
 
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -44,6 +50,13 @@ public sealed class GsiServer : IGsiServer
         {
             if (IsRunning) return true;
             _authToken = string.IsNullOrEmpty(authToken) ? null : authToken;
+
+            // Port validation: prefer dynamic/private range 49152-65535.
+            // If the port is outside this range we still attempt it but log a warning.
+            bool portInDynamicRange = (port >= MinDynamicPort && port <= MaxDynamicPort);
+            if (!portInDynamicRange)
+                AppLog.Warn($"GsiServer: port {port} is outside the recommended dynamic range ({MinDynamicPort}-{MaxDynamicPort}); may conflict with other services.");
+
             try
             {
                 var listener = new HttpListener();

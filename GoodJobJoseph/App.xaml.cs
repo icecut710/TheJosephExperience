@@ -15,7 +15,7 @@ public partial class App : Application
 {
     public static RollingFileLogger Logger = null!;
     public static AppSettingsService? Services;
-    public static readonly string Version = "2.0.0";
+    public static readonly string Version = "2.0.2";
 
     private DatabaseService? _db;
     private SettingsService? _settings;
@@ -547,45 +547,14 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
             }
         }
 
-        // Register secondary celebration (Shift+3)
-        var secondaryBinding = settings.SecondaryCelebrationHotkey;
-        if (secondaryBinding.IsEmpty)
-        {
-            secondaryBinding = new HotkeyBinding
-            {
-                ModifierValue = HotkeyConverter.MOD_SHIFT,
-                VirtualKey = 0x33, // D3
-                KeyName = "3"
-            };
-            settings.SecondaryCelebrationHotkey = secondaryBinding;
-            _settings.Save();
-        }
-
-        var secondaryResult = _hotkey.Register(HotkeyAction.SecondaryCelebration, "Secondary Celebration", secondaryBinding);
-        if (secondaryResult != RegistrationResult.Success && secondaryResult != RegistrationResult.NoKeySelected)
-        {
-            Logger.Warn($"Secondary hotkey registration failed: {secondaryBinding.DisplayName}");
-        }
-
-        // Register sound cycle hotkey (F8 by default)
-        var soundCycleBinding = settings.SoundCycleHotkey.IsEmpty
+        // Register audio toggle hotkey (F8 by default)
+        var audioToggleBinding = settings.AudioToggleHotkey.IsEmpty
             ? new HotkeyBinding { VirtualKey = 0x77, KeyName = "F8" }
-            : settings.SoundCycleHotkey;
-        var soundResult = _hotkey.Register(HotkeyAction.CycleSound, "Cycle Sound", soundCycleBinding);
-        if (soundResult != RegistrationResult.Success && soundResult != RegistrationResult.NoKeySelected)
+            : settings.AudioToggleHotkey;
+        var audioResult = _hotkey.Register(HotkeyAction.AudioToggle, "Audio Toggle", audioToggleBinding);
+        if (audioResult != RegistrationResult.Success && audioResult != RegistrationResult.NoKeySelected)
         {
-            Logger.Warn($"Sound cycle hotkey registration failed: {soundCycleBinding.DisplayName}");
-        }
-
-        // Register stop audio hotkey if assigned
-        var stopBinding = settings.StopAudioHotkey;
-        if (!stopBinding.IsEmpty)
-        {
-            var stopResult = _hotkey.Register(HotkeyAction.StopAudio, "Stop Audio", stopBinding);
-            if (stopResult != RegistrationResult.Success)
-            {
-                Logger.Warn($"Stop audio hotkey registration failed: {stopBinding.DisplayName}");
-            }
+            Logger.Warn($"Audio toggle hotkey registration failed: {audioToggleBinding.DisplayName}");
         }
 
         UpdateStatusIndicator();
@@ -598,14 +567,8 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
             case HotkeyAction.Celebration:
                 _celebration?.Trigger("hotkey");
                 break;
-            case HotkeyAction.SecondaryCelebration:
-                _celebration?.Trigger("secondary");
-                break;
-            case HotkeyAction.CycleSound:
-                _celebration?.CycleSound();
-                break;
-            case HotkeyAction.StopAudio:
-                _audio?.StopCurrent();
+            case HotkeyAction.AudioToggle:
+                _celebration?.ToggleAudio();
                 break;
         }
     }
@@ -654,14 +617,8 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
                 settings.HotkeyModifiers = ModifierMaskToString(binding.ModifierValue);
                 settings.HotkeyKey = binding.KeyName;
                 break;
-            case HotkeyAction.SecondaryCelebration:
-                settings.SecondaryCelebrationHotkey = binding;
-                break;
-            case HotkeyAction.CycleSound:
-                settings.SoundCycleHotkey = binding;
-                break;
-            case HotkeyAction.StopAudio:
-                settings.StopAudioHotkey = binding;
+            case HotkeyAction.AudioToggle:
+                settings.AudioToggleHotkey = binding;
                 break;
         }
         _settings.Save();

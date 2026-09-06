@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     // Settings sub-navigation
     private string _settingsSubPage = "General";
     private StackPanel? _settingsContentHost;
+    private ScrollViewer? _settingsScroll;
 
     // Update check result for release notes access
     private UpdateCheckResultData? _lastUpdateCheckResult;
@@ -277,8 +278,8 @@ public partial class MainWindow : Window
                     : "Cloud: Offline";
         NavStatusCs2.Text = StatusCs2.Text;
         NavStatusAudio.Text = "Audio: Ready";
-        NavStatusHotkey.Text = "Hotkeys: F2 · Shift+3 · F8";
-        StatusVersion.Text = "2.0.1";
+        NavStatusHotkey.Text = "Hotkeys: F2 · F8";
+        StatusVersion.Text = "2.0.2";
         StatusAudio.Text = settings.AudioStopPolicy == AudioStopPolicy.AllowOverlapping
             ? "Audio: Overlap allowed"
             : "Audio: Stop previous";
@@ -1628,6 +1629,7 @@ statsRight.Children.Add(new TextBlock
         RefreshSettingsContent(_settingsContentHost);
 
         scroll.Content = root;
+        _settingsScroll = scroll;
         CrossFade(scroll);
     }
 
@@ -1903,6 +1905,7 @@ statsRight.Children.Add(new TextBlock
     {
         if (_settingsContentHost is not null)
             RefreshSettingsContent(_settingsContentHost);
+        _settingsScroll?.ScrollToTop();
     }
 
     private StackPanel CreateSettingsNavBar()
@@ -2606,72 +2609,32 @@ private StackPanel BuildSettingsSounds()
             Margin = new Thickness(0, 8, 0, 0)
         });
 
-        // Secondary celebration (Shift+3)
-        panel.Children.Add(CreateSectionHeader("SECONDARY CELEBRATION (SHIFT+3)"));
+        // Audio toggle hotkey (F8)
+        panel.Children.Add(CreateSectionHeader("AUDIO TOGGLE (F8)"));
         panel.Children.Add(new TextBlock
         {
-            Text = "An alternate celebration hotkey — useful for testing or a quick deploy with a different trigger context.",
+            Text = "Toggles celebration sounds on/off. Stops any currently playing audio when muting.",
             FontSize = 11.5,
             TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)FindResource("TextSecondaryBrush"),
             Margin = new Thickness(0, 0, 0, 8)
         });
 
-        var secondaryBinding = settings.SecondaryCelebrationHotkey;
-        var secondaryTextDisplay = secondaryBinding.IsEmpty
-            ? "Shift + 3"
-            : HotkeyConverter.GetBindingDisplayName(secondaryBinding.ModifierValue, secondaryBinding.VirtualKey, secondaryBinding.KeyName);
-
-        TextBlock secondaryText = null!;
-        var secondaryResult = CreateHotkeyBubbleLargeWithText(secondaryTextDisplay, () =>
-        {
-            OpenHotkeyDialog(secondaryText, HotkeyAction.SecondaryCelebration, secondaryBinding);
-        });
-        secondaryText = secondaryResult.textBlock;
-        secondaryResult.border.HorizontalAlignment = HorizontalAlignment.Stretch;
-        panel.Children.Add(secondaryResult.border);
-
-        var secondaryReset = new Button
-        {
-            Content = "Reset",
-            Style = (Style)FindResource("SecondaryButton"),
-            FontSize = 10.5,
-            Padding = new Thickness(8, 3, 8, 3),
-            Margin = new Thickness(8, 8, 0, 0)
-        };
-        secondaryReset.Click += (_, _) =>
-        {
-            _app.ResetHotkey(HotkeyAction.SecondaryCelebration);
-            RefreshSettingsPage();
-        };
-        panel.Children.Add(secondaryReset);
-
-        // Sound cycle hotkey (F8)
-        panel.Children.Add(CreateSectionHeader("CYCLE SOUND (F8)"));
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Cycles through sound clips in your library and previews the next one. Does NOT trigger a celebration.",
-            FontSize = 11.5,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"),
-            Margin = new Thickness(0, 0, 0, 8)
-        });
-
-        var soundBinding = settings.SoundCycleHotkey;
-        var soundTextDisplay = soundBinding.IsEmpty
+        var audioBinding = settings.AudioToggleHotkey;
+        var audioTextDisplay = audioBinding.IsEmpty
             ? "F8"
-            : HotkeyConverter.GetBindingDisplayName(soundBinding.ModifierValue, soundBinding.VirtualKey, soundBinding.KeyName);
+            : HotkeyConverter.GetBindingDisplayName(audioBinding.ModifierValue, audioBinding.VirtualKey, audioBinding.KeyName);
 
-        TextBlock soundText = null!;
-        var soundResult = CreateHotkeyBubbleLargeWithText(soundTextDisplay, () =>
+        TextBlock audioText = null!;
+        var audioResult = CreateHotkeyBubbleLargeWithText(audioTextDisplay, () =>
         {
-            OpenHotkeyDialog(soundText, HotkeyAction.CycleSound, soundBinding);
+            OpenHotkeyDialog(audioText, HotkeyAction.AudioToggle, audioBinding);
         });
-        soundText = soundResult.textBlock;
-        soundResult.border.HorizontalAlignment = HorizontalAlignment.Stretch;
-        panel.Children.Add(soundResult.border);
+        audioText = audioResult.textBlock;
+        audioResult.border.HorizontalAlignment = HorizontalAlignment.Stretch;
+        panel.Children.Add(audioResult.border);
 
-        var soundReset = new Button
+        var audioReset = new Button
         {
             Content = "Reset",
             Style = (Style)FindResource("SecondaryButton"),
@@ -2679,63 +2642,12 @@ private StackPanel BuildSettingsSounds()
             Padding = new Thickness(8, 3, 8, 3),
             Margin = new Thickness(8, 8, 0, 0)
         };
-        soundReset.Click += (_, _) =>
+        audioReset.Click += (_, _) =>
         {
-            _app.ResetHotkey(HotkeyAction.CycleSound);
+            _app.ResetHotkey(HotkeyAction.AudioToggle);
             RefreshSettingsPage();
         };
-        panel.Children.Add(soundReset);
-
-        if (settings.PreviewSoundWhenCycling)
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Sound preview on cycle: ON",
-                FontSize = 10.5,
-                Foreground = (Brush)FindResource("TextMutedBrush"),
-                Margin = new Thickness(0, 8, 0, 0)
-            });
-        }
-
-        // Stop audio hotkey
-        panel.Children.Add(CreateSectionHeader("STOP AUDIO"));
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Stops any currently playing celebration audio. Not assigned by default.",
-            FontSize = 11.5,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"),
-            Margin = new Thickness(0, 0, 0, 8)
-        });
-
-        var stopBinding = settings.StopAudioHotkey;
-        var stopTextDisplay = stopBinding.IsEmpty
-            ? "Not assigned"
-            : HotkeyConverter.GetBindingDisplayName(stopBinding.ModifierValue, stopBinding.VirtualKey, stopBinding.KeyName);
-
-        TextBlock stopText = null!;
-        var stopResult = CreateHotkeyBubbleLargeWithText(stopTextDisplay, () =>
-        {
-            OpenHotkeyDialog(stopText, HotkeyAction.StopAudio, stopBinding);
-        });
-        stopText = stopResult.textBlock;
-        stopResult.border.HorizontalAlignment = HorizontalAlignment.Stretch;
-        panel.Children.Add(stopResult.border);
-
-        var stopReset = new Button
-        {
-            Content = "Reset",
-            Style = (Style)FindResource("SecondaryButton"),
-            FontSize = 10.5,
-            Padding = new Thickness(8, 3, 8, 3),
-            Margin = new Thickness(8, 8, 0, 0)
-        };
-        stopReset.Click += (_, _) =>
-        {
-            _app.ResetHotkey(HotkeyAction.StopAudio);
-            RefreshSettingsPage();
-        };
-        panel.Children.Add(stopReset);
+        panel.Children.Add(audioReset);
 
         return panel;
     }
@@ -2829,7 +2741,7 @@ private StackPanel BuildSettingsSounds()
         panel.Children.Add(manifestBox);
         panel.Children.Add(new TextBlock
         {
-             Text = "Default: https://raw.githubusercontent.com/icecot710/TheJosephExperience/master/updates/update-manifest.json",
+             Text = "Default: https://raw.githubusercontent.com/icecut710/TheJosephExperience/master/updates/update-manifest.json",
             FontSize = 10,
             Foreground = (Brush)FindResource("TextMutedBrush"),
             Margin = new Thickness(0, 0, 0, 6)
@@ -2838,7 +2750,7 @@ private StackPanel BuildSettingsSounds()
         panel.Children.Add(CreateSectionHeader("VERSION"));
         panel.Children.Add(new TextBlock
         {
-            Text = $"The Joseph Experience 2.0  {App.Version}",
+             Text = $"The Joseph Experience {App.Version}",
             FontSize = 11.5,
             Margin = new Thickness(0, 0, 0, 4)
         });

@@ -207,9 +207,7 @@ public static class HotkeyConverter
         return action switch
         {
             HotkeyAction.Celebration => new HotkeyBinding { ModifierValue = 0, VirtualKey = 0x71, KeyName = "F2" },
-            HotkeyAction.SecondaryCelebration => new HotkeyBinding { ModifierValue = 0x4, VirtualKey = 0x33, KeyName = "3" },
-            HotkeyAction.CycleSound => new HotkeyBinding { ModifierValue = 0, VirtualKey = 0x77, KeyName = "F8" },
-            HotkeyAction.StopAudio => new HotkeyBinding { VirtualKey = 0, KeyName = "" },
+            HotkeyAction.AudioToggle => new HotkeyBinding { ModifierValue = 0, VirtualKey = 0x77, KeyName = "F8" },
             _ => new HotkeyBinding(),
         };
     }

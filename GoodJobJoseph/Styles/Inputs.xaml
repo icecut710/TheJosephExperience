@@ -301,7 +301,7 @@
         </Setter>
     </Style>
 
-    <!-- ============================================================= -->
+     <!-- ============================================================= -->
     <!-- SLIDER (premium with accent track)                           -->
     <!-- ============================================================= -->
     <Style TargetType="Slider">
@@ -312,19 +312,20 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
-                    <Grid VerticalAlignment="Center">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Track x:Name="PART_Track">
+                    <Grid x:Name="OuterGrid" Height="18" VerticalAlignment="Center">
+                        <!-- Base track: full width, subtle gray -->
+                        <Border x:Name="BaseTrack" Height="4" CornerRadius="2"
+                                Background="{StaticResource BorderBrush}"
+                                VerticalAlignment="Center"/>
+                        <!-- PART_Track provides filled/unfilled regions via its repeat buttons -->
+                        <Track x:Name="PART_Track" Height="4" VerticalAlignment="Center">
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton Command="Slider.DecreaseLarge">
                                     <RepeatButton.Template>
                                         <ControlTemplate TargetType="RepeatButton">
                                             <Border Height="4" CornerRadius="2"
                                                     Background="{StaticResource AccentBrush}"
-                                                    HorizontalAlignment="Left"/>
+                                                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                                         </ControlTemplate>
                                     </RepeatButton.Template>
                                 </RepeatButton>
@@ -335,7 +336,7 @@
                                         <ControlTemplate TargetType="RepeatButton">
                                             <Border Height="4" CornerRadius="2"
                                                     Background="{StaticResource BorderBrush}"
-                                                    HorizontalAlignment="Right"/>
+                                                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                                         </ControlTemplate>
                                     </RepeatButton.Template>
                                 </RepeatButton>

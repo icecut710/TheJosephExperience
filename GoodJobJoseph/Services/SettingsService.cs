@@ -9,8 +9,9 @@ public class SettingsService
 {
     private readonly string _settingsPath;
     private readonly object _lock = new();
-    private readonly object _writeGate = new();
-    private Task? _lastWrite;
+    private readonly object _saveGate = new();
+    private Task? _debounceTask;
+    private bool _savePending = false;
 
     public AppSettings Current { get; private set; }
 
@@ -95,26 +96,53 @@ public class SettingsService
 
     public void Save()
     {
-        string json;
-        lock (_lock)
+        // Coalesce rapid save calls (e.g. during slider drags) into a single
+        // debounced disk write. The UI thread only sets a flag under a lock;
+        // JSON serialization and file I/O happen entirely off-thread.
+        lock (_saveGate)
         {
-            json = JsonSerializer.Serialize(Current, new JsonSerializerOptions
+            _savePending = true;
+            if (_debounceTask is null || _debounceTask.IsCompleted)
             {
-                WriteIndented = true
-            });
-        }
-        // Fire-and-forget: serialize under lock (fast), write off the UI thread.
-        // Chained so rapid successive saves complete in order — never tears or stales.
-        lock (_writeGate)
-        {
-            _lastWrite = WriteOrdered(json, _settingsPath, _lastWrite);
+                _debounceTask = DebouncedWriteAsync();
+            }
         }
     }
 
-    private static async Task WriteOrdered(string json, string path, Task? previous)
+    private async Task DebouncedWriteAsync()
     {
-        if (previous is not null) try { await previous.ConfigureAwait(false); } catch { /* swallow — prior write already logged */ }
-        await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+        while (true)
+        {
+            await Task.Delay(300).ConfigureAwait(false);
+
+            bool shouldWrite;
+            lock (_saveGate)
+            {
+                shouldWrite = _savePending;
+                _savePending = false;
+            }
+
+            if (!shouldWrite) return;
+
+            string json;
+            lock (_lock)
+            {
+                json = JsonSerializer.Serialize(Current, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+            }
+
+            try
+            {
+                await File.WriteAllTextAsync(_settingsPath, json).ConfigureAwait(false);
+                AppLog.Info($"Settings persisted to {_settingsPath}.");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"Settings save failed: {ex.Message}");
+            }
+        }
     }
 
     public void Reset()

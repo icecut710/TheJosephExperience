@@ -29,9 +29,7 @@ public enum RegistrationResult
 public enum HotkeyAction
 {
     Celebration,
-    SecondaryCelebration,
-    CycleSound,
-    StopAudio,
+    AudioToggle,
     None
 }
 
@@ -236,9 +234,7 @@ public class HotkeyService : IDisposable
         var name = action switch
         {
             HotkeyAction.Celebration => "Celebration (F2)",
-            HotkeyAction.SecondaryCelebration => "Secondary Celebration (Shift+3)",
-            HotkeyAction.CycleSound => "Cycle Sound (F8)",
-            HotkeyAction.StopAudio => "Stop Audio",
+            HotkeyAction.AudioToggle => "Audio Toggle (F8)",
             _ => action.ToString()
         };
         return Register(action, name, binding);
