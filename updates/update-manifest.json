@@ -1,0 +1,18 @@
+{
+  "version": "2.0.1",
+  "minimumSupportedVersion": "2.0.0",
+  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.1/TheJosephExperience-v2.0.1-win-x64.zip",
+  "sha256": "4efa735e4d11b8b2633e32e7d790e161296842a65e459df78e35691d9b3a0650",
+  "fileSize": 97998356,
+  "releaseDateUtc": "2026-09-06T01:23:00Z",
+  "releaseType": "release",
+  "mandatory": false,
+  "releaseNotes": [
+    "v2.0.1: Production release with CS2 GSI integration",
+    "Cloud update pipeline with manifest-based download and SHA-256 verification",
+    "Market range selector and celebration activity graph",
+    "Hotkey rebinding (F2 celebrate, Shift+3 secondary, F8 cycle sounds, Stop Audio)",
+    "Single-instance mutex prevents duplicate processes",
+    "Updater helper with backup/rollback support"
+  ]
+}

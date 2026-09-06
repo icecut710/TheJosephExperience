@@ -2829,7 +2829,7 @@ private StackPanel BuildSettingsSounds()
         panel.Children.Add(manifestBox);
         panel.Children.Add(new TextBlock
         {
-            Text = "Leave blank to use the default update server.",
+             Text = "Default: https://raw.githubusercontent.com/icecot710/TheJosephExperience/master/updates/update-manifest.json",
             FontSize = 10,
             Foreground = (Brush)FindResource("TextMutedBrush"),
             Margin = new Thickness(0, 0, 0, 6)

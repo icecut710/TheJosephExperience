@@ -400,7 +400,7 @@ public class AppSettings
     public HotkeyBinding SecondaryCelebrationHotkey { get; set; } = new();
 
     public SyncFrequency SyncFrequency { get; set; } = SyncFrequency.OnStartup;
-    public string UpdateManifestUrl { get; set; } = "";
+    public string UpdateManifestUrl { get; set; } = "https://raw.githubusercontent.com/icecot710/TheJosephExperience/master/updates/update-manifest.json";
     public bool SyncOnStartup { get; set; } = true;
     public GridDensity GridDensity { get; set; } = GridDensity.Normal;
     public LibrarySortMode LibrarySort { get; set; } = LibrarySortMode.Name;
