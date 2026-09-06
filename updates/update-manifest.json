@@ -1,26 +1,18 @@
 {
-  "version": "2.0.2",
+  "version": "2.0.3",
   "minimumSupportedVersion": "2.0.0",
-  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.2/TheJosephExperience-v2.0.2-win-x64.zip",
-  "sha256": "0C8071CF194A9002BEC12D841F8CFEA69650DADAEC733C28DDCAF074C1039E59",
-  "fileSize": 98000545,
-  "releaseDateUtc": "2026-09-06T03:30:00Z",
+  "downloadUrl": "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.3/TheJosephExperience-v2.0.3-win-x64.zip",
+  "sha256": "D64A8F48575D6EB7604BD91B08B4617AE6DFAABDE8EA3EDA1654F5B539353C67",
+  "fileSize": 98000583,
+  "releaseDateUtc": "2026-09-06T04:58:00Z",
   "releaseType": "release",
   "mandatory": false,
   "releaseNotes": [
-    "v2.0.2: Comprehensive UI + root-cause fix pass",
-    "Fixed blank Hotkeys/Updates settings tabs (missing SecondaryButton style)",
-    "Fixed slider track visibility (only thumb was rendering)",
-    "Fixed update manifest URL typo",
-    "Simplified hotkeys to F2 (Celebration) + F8 (Audio Toggle)",
-    "Debounced settings saves to fix slider drag latency",
-    "Settings scroll resets to top on category switch",
-    "Supabase uploads use configurable upload token (service role key)",
-    "Fixed NADD price chart rendering (chart was 0-width in Auto column)",
-    "Fixed BarChartView label positioning (TextAlignment on Canvas TextBlocks doesn't work)",
-    "Fixed OverlayWindow cache dictionary constructor",
-    "Live CS2 status updates via StateChanged event",
-    "Overlay fills window (Stretch Fill mode)",
-    "Version 2.0.2"
+    "v2.0.3: Zero-lag overlay + fit-mode separation",
+    "Overlay animation performance: keyed render cache + opaque-format fast path (eliminates lag on repeated celebrations)",
+    "Overlay fit modes properly separated: Contain (uniform), Fill Screen (fill + crop), Stretch (fill), Actual Size (native pixels)",
+    "Celebration overlay text: one-line centered with auto-fit font sizing",
+    "Both F2 celebration paths now use the image-ID render cache",
+    "Version 2.0.3"
   ]
 }
