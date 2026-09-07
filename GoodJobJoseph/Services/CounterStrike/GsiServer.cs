@@ -89,7 +89,7 @@ public sealed class GsiServer : IGsiServer
                 AppLog.Warn($"GsiServer start failed: {ex.Message}");
             }
 
-            try { _listener?.Close(); } catch { }
+            try { _listener?.Close(); } catch (Exception ex) { AppLog.Warn($"GsiServer: listener close failed: {ex.Message}"); }
             _listener = null;
             IsRunning = false;
             return false;
@@ -102,10 +102,10 @@ public sealed class GsiServer : IGsiServer
         {
             if (!IsRunning && _listener is null) return;
             IsRunning = false;
-            try { _cts?.Cancel(); } catch { }
-            try { _listener?.Stop(); _listener?.Close(); } catch { }
+            try { _cts?.Cancel(); } catch (Exception ex) { AppLog.Warn($"GsiServer: CTS cancel failed: {ex.Message}"); }
+            try { _listener?.Stop(); _listener?.Close(); } catch (Exception ex) { AppLog.Warn($"GsiServer: listener stop failed: {ex.Message}"); }
             _listener = null;
-            try { _cts?.Dispose(); } catch { }
+            try { _cts?.Dispose(); } catch (Exception ex) { AppLog.Warn($"GsiServer: CTS dispose failed: {ex.Message}"); }
             _cts = null;
             _loop = null;
             AppLog.Info("GsiServer: stopped.");
@@ -113,6 +113,30 @@ public sealed class GsiServer : IGsiServer
     }
 
     public void Dispose() => Stop();
+
+    /// <summary>
+    /// Validates the auth token. CS2's GSI client does NOT send HTTP auth headers —
+    /// the "auth" block from the .cfg is embedded in the JSON body, e.g.
+    /// "auth":{"token":"..."} (and some providers echo it as "auth":"token").
+    /// We therefore accept: an Authorization header (raw or Bearer), an x-auth-token
+    /// header, or the token inside the payload JSON. This keeps test harnesses that
+    /// use headers working while accepting genuine CS2 traffic.
+    /// </summary>
+    private bool IsAuthorized(HttpListenerRequest request, string body)
+    {
+        if (string.IsNullOrEmpty(_authToken)) return true;
+
+        var presented = request.Headers["Authorization"]
+                        ?? request.Headers["x-auth-token"] ?? "";
+        if (presented.StartsWith("Bearer ", StringComparison.Ordinal))
+            presented = presented.Substring("Bearer ".Length);
+        if (string.Equals(presented, _authToken, StringComparison.Ordinal))
+            return true;
+
+        // Token embedded in the GSI payload itself (what real CS2 traffic looks like).
+        return body.Contains("\"token\"", StringComparison.OrdinalIgnoreCase) &&
+               body.Contains(_authToken, StringComparison.Ordinal);
+    }
 
     private async Task LoopAsync(HttpListener listener, CancellationToken token)
     {
@@ -166,19 +190,11 @@ public sealed class GsiServer : IGsiServer
                 return;
             }
 
-            if (!string.IsNullOrEmpty(_authToken))
+            if (!IsAuthorized(ctx.Request, body))
             {
-                var presented = ctx.Request.Headers["Authorization"]
-                                ?? ctx.Request.Headers["x-auth-token"] ?? "";
-                // Accept a raw token or a "Bearer <token>" Authorization header; reject everything else.
-                if (presented.StartsWith("Bearer ", StringComparison.Ordinal))
-                    presented = presented.Substring("Bearer ".Length);
-                if (!string.Equals(presented, _authToken, StringComparison.Ordinal))
-                {
-                    ctx.Response.StatusCode = 401;
-                    AppLog.Warn("GsiServer: rejected payload with invalid auth token.");
-                    return;
-                }
+                ctx.Response.StatusCode = 401;
+                AppLog.Warn("GsiServer: rejected payload with invalid auth token.");
+                return;
             }
 
             LastPayloadUtc = DateTime.UtcNow;
@@ -188,11 +204,11 @@ public sealed class GsiServer : IGsiServer
         catch (Exception ex)
         {
             AppLog.Warn($"GsiServer handle error: {ex.Message}");
-            try { ctx.Response.StatusCode = 500; } catch { }
+            try { ctx.Response.StatusCode = 500; } catch (Exception ex2) { AppLog.Warn($"GsiServer: failed to set 500 status: {ex2.Message}"); }
         }
         finally
         {
-            try { ctx.Response.Close(); } catch { }
+            try { ctx.Response.Close(); } catch (Exception ex2) { AppLog.Warn($"GsiServer: failed to close response: {ex2.Message}"); }
         }
     }
 }

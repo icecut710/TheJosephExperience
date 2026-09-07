@@ -6,7 +6,6 @@ using System.Windows.Media.Effects;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
@@ -16,10 +15,28 @@ using JosephExperience;
 using JosephExperience.Models;
 using JosephExperience.Services;
 using JosephExperience.Services.CounterStrike;
+using JosephExperience.Services.HalfLife2;
 using JosephExperience.Models.CounterStrike;
 using JosephExperience.Utilities;
 
 namespace JosephExperience.Views;
+
+// Easing function for spring-like animations with overshoot
+public class SpringOvershoot : IEasingFunction
+{
+    public double Oscillations { get; set; } = 1.0;
+    public double Springiness { get; set; } = 12.0;
+    public double Overshoot { get; set; } = 0.2;
+
+    public double Ease(double normalizedTime)
+    {
+        // Spring easing with overshoot
+        var progress = normalizedTime;
+        var spring = Math.Sin(progress * Math.PI * Oscillations) * Math.Exp(-progress * Springiness);
+        var overshoot = 1 + Overshoot * (1 - progress);
+        return 1 - (1 - spring * 0.2) * overshoot;
+    }
+}
 
 public partial class MainWindow : Window
 {
@@ -34,6 +51,7 @@ public partial class MainWindow : Window
     private string _settingsSubPage = "General";
     private StackPanel? _settingsContentHost;
     private ScrollViewer? _settingsScroll;
+    private bool _settingsInitialEntry = true;
 
     // Update check result for release notes access
     private UpdateCheckResultData? _lastUpdateCheckResult;
@@ -107,37 +125,67 @@ public partial class MainWindow : Window
 
     internal void ShowHotkeyError(string message, Models.HotkeyBinding? binding = null)
     {
-        SetStatus("HOTKEY UNAVAILABLE", new SolidColorBrush(Color.FromRgb(0xD9, 0x6C, 0x79)));
+            SetStatus("HOTKEY UNAVAILABLE", (Brush)FindResource("DangerBrush"));
         MessageBox.Show(message, "The Joseph Experience 2.0",
             MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     internal void ShowHotkeySuccess(string hotkey)
     {
-        SetStatus("READY", new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)));
+        SetStatus("READY", (Brush)FindResource("SuccessBrush"));
         UpdateStatusBar();
     }
 
-    /// <summary>Live feedback for the F8 audio-toggle hotkey (visible in the status bar).</summary>
     internal void OnSoundToggleChanged(bool on)
     {
-        SetStatus(on ? "SOUND ON" : "SOUND OFF",
-            on ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A))
-               : new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)));
+        SetStatus(on ? "READY" : "DISABLED", on ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"));
+        StatusAudio.Text = on ? "AUDIO  ·  ON" : "AUDIO  ·  OFF";
         UpdateStatusBar();
         ShowToast(on ? "Sound ON" : "Sound OFF",
-            on ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A))
-               : new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)));
+            on ? (Brush)FindResource("SuccessBrush")
+               : (Brush)FindResource("TextMutedBrush"));
     }
 
-    /// <summary>Transient toast in the bottom-right corner; auto-hides and fades out.</summary>
+    /// <summary>Transient toast in the bottom-right corner; slides in, auto-hides and fades out.</summary>
     internal void ShowToast(string message, Brush? foreground = null)
     {
         ToastText.Text = message;
         ToastText.Foreground = foreground ?? (Brush)FindResource("TextPrimaryBrush");
         Toast.Visibility = Visibility.Visible;
         Toast.BeginAnimation(UIElement.OpacityProperty, null);
-        Toast.Opacity = 1.0;
+        Toast.Opacity = 0;
+
+        if (Toast.RenderTransform is not TranslateTransform toastSlide)
+        {
+            toastSlide = new TranslateTransform();
+            Toast.RenderTransform = toastSlide;
+        }
+
+        // Reset position
+        toastSlide.Y = 14;
+
+        // Fade in
+        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        Toast.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+
+        // Slide-up entry
+        var slideIn = new DoubleAnimation(14, 0, TimeSpan.FromMilliseconds(280))
+        {
+            EasingFunction = new SpringOvershoot()
+        };
+        toastSlide.BeginAnimation(TranslateTransform.YProperty, slideIn);
+
+        // Accent rail reveal
+        var railFadeIn = new DoubleAnimation(0, 0.8, TimeSpan.FromMilliseconds(180))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(80),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        ToastAccentRail.BeginAnimation(UIElement.OpacityProperty, railFadeIn);
+
         _toastHideTimer.Stop();
         _toastHideTimer.Start();
     }
@@ -145,12 +193,33 @@ public partial class MainWindow : Window
     private void ToastHideTimer_Tick(object? sender, EventArgs e)
     {
         _toastHideTimer.Stop();
-        var fade = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(260))
+        
+        // Accent rail fade out
+        var railFadeOut = new DoubleAnimation(0.8, 0, TimeSpan.FromMilliseconds(120))
         {
-            BeginTime = TimeSpan.FromMilliseconds(120)
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+        ToastAccentRail.BeginAnimation(UIElement.OpacityProperty, railFadeOut);
+
+        // Fade out with smooth curve
+        var fade = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(280))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(120),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
         };
         fade.Completed += (_, _) => Toast.Visibility = Visibility.Collapsed;
         Toast.BeginAnimation(UIElement.OpacityProperty, fade);
+
+        // Slide out gently
+        if (Toast.RenderTransform is TranslateTransform slideOut)
+        {
+            var drop = new DoubleAnimation(0, 12, TimeSpan.FromMilliseconds(300))
+            {
+                BeginTime = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+            };
+            slideOut.BeginAnimation(TranslateTransform.YProperty, drop);
+        }
     }
 
     // =================================================================
@@ -252,22 +321,35 @@ public partial class MainWindow : Window
 
     private static FrameworkElement CreatePageHeader(string title, string? subtitle = null)
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 22) };
         panel.Children.Add(new TextBlock
         {
             Text = title,
-            FontSize = 26,
-            FontWeight = FontWeights.SemiBold,
+            FontSize = 27,
+            FontWeight = FontWeights.Bold,
             Foreground = (Brush)Application.Current.FindResource("TextPrimaryBrush")
         });
+
+        // Accent underline bar — signature detail tying the header to the app accent.
+        var accentBar = new Border
+        {
+            Width = 48,
+            Height = 3,
+            CornerRadius = new CornerRadius(2),
+            Background = (Brush)Application.Current.FindResource("AccentGradientBrush"),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 7, 0, 0)
+        };
+        panel.Children.Add(accentBar);
+
         if (!string.IsNullOrEmpty(subtitle))
         {
             panel.Children.Add(new TextBlock
             {
                 Text = subtitle,
-                FontSize = 13,
+                FontSize = 12.5,
                 Foreground = (Brush)Application.Current.FindResource("TextMutedBrush"),
-                Margin = new Thickness(0, 3, 0, 0)
+                Margin = new Thickness(0, 7, 0, 0)
             });
         }
         return panel;
@@ -277,8 +359,13 @@ public partial class MainWindow : Window
     {
         ContentHost.Content = content;
         content.Opacity = 0;
-        var anim = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-        content.BeginAnimation(OpacityProperty, anim);
+        // Slide-up + fade entry for a smoother page change.
+        var translate = new TranslateTransform { Y = 10 };
+        content.RenderTransform = translate;
+        var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+        var slide = new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(200)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+        content.BeginAnimation(OpacityProperty, fade);
+        translate.BeginAnimation(TranslateTransform.YProperty, slide);
     }
 
     // =================================================================
@@ -300,11 +387,11 @@ public partial class MainWindow : Window
         var enabled = settings.Enabled;
         if (!enabled)
         {
-            SetStatus("DISABLED", new SolidColorBrush(Color.FromRgb(0x66, 0x6B, 0x75)));
+            SetStatus("DISABLED", (Brush)FindResource("TextMutedBrush"));
         }
         else
         {
-                        SetStatus("READY", new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)));
+                        SetStatus("READY", (Brush)FindResource("SuccessBrush"));
         }
 
         // Cloud status dot (truthful): green=connected, blue=syncing,
@@ -317,15 +404,15 @@ public partial class MainWindow : Window
         }
         else if (supabase.IsConnected)
         {
-            cloudDot = new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A));
+            cloudDot = (Brush)FindResource("SuccessBrush");
         }
         else if (supabase.State == SupabaseState.Syncing)
         {
-            cloudDot = new SolidColorBrush(Color.FromRgb(0x72, 0x81, 0xFF));
+            cloudDot = (Brush)FindResource("AccentBrush");
         }
         else if (supabase.State == SupabaseState.Offline || supabase.State == SupabaseState.Error)
         {
-            cloudDot = new SolidColorBrush(Color.FromRgb(0xD9, 0x6C, 0x79));
+            cloudDot = (Brush)FindResource("DangerBrush");
         }
 
         if (cloudDot is not null)
@@ -333,7 +420,21 @@ public partial class MainWindow : Window
             CloudDot.Fill = cloudDot;
         }
 
-        StatusHotkey.Text = CurrentHotkeyText(settings);
+        // Supabase bucket usage — shared across all clients
+        if (supabase is not null && supabase.Config.IsConfigured && supabase.QuotaBytes > 0)
+        {
+            StatusCloudUsage.Text = $"{SupabaseService.UsedBytesBytesFormat(supabase.UsedBytes)} / {SupabaseService.QuotaBytesBytesFormat(supabase.QuotaBytes)} ({supabase.UsedPercent}%)";
+        }
+        else if (supabase is not null && supabase.Config.IsConfigured)
+        {
+            StatusCloudUsage.Text = $"Configured — {supabase.UsedPercent}% used (connect to enable real-time stats)";
+        }
+        else
+        {
+            StatusCloudUsage.Text = "— Configured via .env to enable cloud bucket stats";
+        }
+
+        StatusHotkey.Text = $"HOTKEYS  ·  {CurrentHotkeyText(settings)}";
         RefreshStatsDisplay();
         UpdateCs2Status();
 
@@ -347,11 +448,17 @@ public partial class MainWindow : Window
                     ? "Cloud: Syncing"
                     : "Cloud: Offline";
         NavStatusCs2.Text = StatusCs2.Text;
+        NavStatusCs2.ToolTip = StatusCs2.Text;
+        UpdateMw2Status();
         NavStatusAudio.Text = settings.PlaySound ? "Audio: On" : "Audio: Off";
-        NavStatusHotkey.Text = "Hotkeys: F2 · F8";
-        StatusVersion.Text = "2.0.2";
-        StatusAudio.Text = settings.PlaySound ? "Audio: On (Press F8 to mute)" : "Audio: Off (Press F8 to enable)";
+        NavStatusAudio.ToolTip = StatusAudio.Text;
+        NavStatusHotkey.Text = "HOTKEYS  ·  F2";
+        NavStatusHotkey.ToolTip = "F2: Trigger a Joseph celebration\nF8: Toggle celebration sounds";
+        StatusVersion.Text = "v2.0.2";
+        StatusAudio.Text = settings.PlaySound ? "AUDIO  ·  ON" : "AUDIO  ·  OFF";
     }
+
+    private System.Windows.Media.Animation.Storyboard? _cs2Pulse;
 
     private void UpdateCs2Status()
     {
@@ -359,19 +466,151 @@ public partial class MainWindow : Window
         var cs2 = Services.GameIntegration?.Invoke();
         var phase = cs2?.State.Phase ?? CounterStrikeConnectionPhase.Disabled;
 
+        string text;
+        Brush dot, label;
+        bool pulse = false;
+
         if (phase is CounterStrikeConnectionPhase.Disabled or CounterStrikeConnectionPhase.Error)
         {
-            StatusCs2.Text = "CS2: Disconnected";
-            StatusCs2.Foreground = (Brush)FindResource("TextMutedBrush");
+            text = "CS2: Disconnected";
+            dot = label = (Brush)FindResource("TextMutedBrush");
+        }
+        else if (phase is CounterStrikeConnectionPhase.ConfigurationMissing or CounterStrikeConnectionPhase.ConfigurationInvalid)
+        {
+            text = "CS2: Setup Required";
+            dot = label = (Brush)FindResource("WarningBrush");
+        }
+        else if (phase is CounterStrikeConnectionPhase.PortConflict)
+        {
+            text = "CS2: Port Conflict";
+            dot = label = (Brush)FindResource("DangerBrush");
+        }
+        else if (phase == CounterStrikeConnectionPhase.ReceivingGameState)
+        {
+            // We have a connection — show live/idle/stale based on freshness
+            var freshness = cs2?.Freshness ?? PayloadFreshness.NeverReceived;
+            switch (freshness)
+            {
+                case PayloadFreshness.Receiving:
+                    text = "CS2: Live";
+                    dot = label = (Brush)FindResource("SuccessBrush");
+                    pulse = true;
+                    break;
+                case PayloadFreshness.Idle:
+                    text = "CS2: Live (idle)";
+                    dot = label = (Brush)FindResource("AccentBrush");
+                    pulse = true;  // gentle pulse to indicate connection is alive but slow
+                    break;
+                case PayloadFreshness.Stale:
+                    text = "CS2: Stale — reconnecting…";
+                    dot = label = (Brush)FindResource("WarningBrush");
+                    pulse = true;  // urgent pulse to indicate problem
+                    break;
+                default:
+                    text = "CS2: Connected (awaiting data)";
+                    dot = label = (Brush)FindResource("AccentBrush");
+                    break;
+            }
+        }
+        else if (phase == CounterStrikeConnectionPhase.Cs2Running)
+        {
+            text = "CS2: Game Detected (no data)";
+            dot = label = (Brush)FindResource("AccentBrush");
+            pulse = true;
         }
         else
         {
-            var detail = cs2?.State.Detail ?? "";
-            var canonical = cs2?.State.ToString() ?? "Disconnected";
-            // Canonical one-line status derived from CounterStrikeConnectionState.
-            StatusCs2.Text = $"CS2: {canonical}";
-            StatusCs2.Foreground = (Brush)FindResource("TextSecondaryBrush");
+            text = "CS2: Listening";
+            dot = label = (Brush)FindResource("AccentBrush");
         }
+
+        StatusCs2.Text = text;
+        StatusCs2.Foreground = label;
+        if (FindName("Cs2Dot") is System.Windows.Shapes.Ellipse cs2Dot)
+        {
+            cs2Dot.Fill = dot;
+            ApplyPulse(cs2Dot, pulse);
+        }
+    }
+
+    /// <summary>Runs a soft heartbeat animation on a status dot while active; stops it otherwise.</summary>
+    private void ApplyPulse(System.Windows.Shapes.Ellipse dot, bool active)
+    {
+        _cs2Pulse?.Remove(dot);
+        _cs2Pulse = null;
+        dot.Opacity = 1d;
+        if (!active) return;
+
+        var anim = new System.Windows.Media.Animation.DoubleAnimation(1d, 0.35, TimeSpan.FromMilliseconds(900))
+        {
+            AutoReverse = true,
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+            EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+        };
+        var sb = new System.Windows.Media.Animation.Storyboard { Duration = System.Windows.Duration.Automatic };
+        sb.Children.Add(anim);
+        System.Windows.Media.Animation.Storyboard.SetTarget(anim, dot);
+        System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new PropertyPath("Opacity"));
+        sb.Begin(dot, true);
+        _cs2Pulse = sb;
+    }
+
+    private void UpdateMw2Status()
+    {
+        var mw2Providers = Services.GameProviders?.Invoke() ?? Array.Empty<IGameIntegrationProvider?>();
+        var mw2 = mw2Providers.FirstOrDefault(p => p?.GameId == "mw2");
+        var state = mw2?.State ?? "Not initialized";
+
+        if (state == "Running")
+        {
+            StatusMw2.Text = $"MW2: {mw2?.Mode ?? "Running"}";
+            StatusMw2.Foreground = (Brush)FindResource("SuccessBrush");
+        }
+        else
+        {
+            StatusMw2.Text = "MW2: Disconnected";
+            StatusMw2.Foreground = (Brush)FindResource("TextMutedBrush");
+        }
+        NavStatusMw2.Text = StatusMw2.Text;
+        NavStatusMw2.ToolTip = StatusMw2.Text;
+    }
+
+    private StackPanel BuildMw2StatusContent(AppSettings settings)
+    {
+        var mw2Providers = Services.GameProviders?.Invoke() ?? Array.Empty<IGameIntegrationProvider?>();
+        var mw2 = mw2Providers.FirstOrDefault(p => p?.GameId == "mw2");
+        var state = mw2?.State ?? "Not initialized";
+
+        var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+        var statusText = state == "Running"
+            ? $"MW2: {mw2?.Mode ?? "Running"}"
+            : "MW2: Disconnected";
+
+        content.Children.Add(new TextBlock
+        {
+            Text = statusText,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = state == "Running"
+                ? (Brush)FindResource("SuccessBrush")
+                : (Brush)FindResource("TextMutedBrush"),
+            Margin = new Thickness(0, 0, 8, 0)
+        });
+
+        // Mode indicator
+        var modeText = mw2?.Mode != null ? new TextBlock
+        {
+            Text = $"({mw2.Mode})",
+            FontSize = 10,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 0, 0)
+        } : null;
+
+        if (modeText != null) content.Children.Add(modeText);
+
+        return content;
     }
 
     private static string CurrentHotkeyText(AppSettings settings)
@@ -453,14 +692,14 @@ public partial class MainWindow : Window
             StatusSoundsPlayed.Text = stats.SoundsPlayed.ToString("N0");
 
             // Celebrations today
-            StatusCelebrationsToday.Text = stats.CelebrationsToday.ToString("N0");
+            StatusCelebrationsToday.Text = stats.CelebrationsToday > 0 ? $"{stats.CelebrationsToday} TODAY" : "0 TODAY";
         }
         catch
         {
             StatusNaddPrice.Text = "NADD: --";
             StatusNaddPrice.Opacity = 0.4;
             StatusSoundsPlayed.Text = "?";
-            StatusCelebrationsToday.Text = "?";
+            StatusCelebrationsToday.Text = "0 TODAY";
         }
     }
 
@@ -490,7 +729,7 @@ public partial class MainWindow : Window
         statusTitleRow.Children.Add(new Ellipse
         {
             Width = 8, Height = 8,
-            Fill = settings.Enabled ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)) : (Brush)FindResource("TextMutedBrush"),
+            Fill = settings.Enabled ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 7, 0)
         });
         statusTitleRow.Children.Add(new TextBlock
@@ -523,18 +762,19 @@ public partial class MainWindow : Window
         // Joseph preview (compact)
         var previewFrame = new Border
         {
-            Background = (Brush)FindResource("BgAltBrush"),
+            Background = (Brush)FindResource("ElevatedBrush"),
             BorderBrush = (Brush)FindResource("BorderBrush"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(10),
             Width = 132, Height = 132,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 2, 0, 6)
+            Margin = new Thickness(0, 2, 0, 6),
+            Effect = (Effect)FindResource("CardShadowEffect")
         };
         var previewImage = new Image
         {
             Stretch = Stretch.Uniform,
-            Margin = new Thickness(6),
+            StretchDirection = StretchDirection.Both,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -575,66 +815,82 @@ public partial class MainWindow : Window
 
         // Deployed stat
         var deployedRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
-        deployedRow.Children.Add(new TextBlock { Text = "JOSEPHS DEPLOYED  ", FontSize = 10, Foreground = (Brush)FindResource("TextMutedBrush"), VerticalAlignment = VerticalAlignment.Center });
+        deployedRow.Children.Add(new TextBlock { Text = "JOSEPHS DEPLOYED", FontSize = 10, Foreground = (Brush)FindResource("TextMutedBrush"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
         deployedRow.Children.Add(new TextBlock { Text = stats.TotalCelebrations.ToString("N0"), FontSize = 13, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("AccentBrush"), VerticalAlignment = VerticalAlignment.Center });
         panel.Children.Add(deployedRow);
 
-// Statistics card
-var statsCard = new Border
-{
-    Margin = new Thickness(0, 6, 0, 6),
-    Background = (Brush)FindResource("ElevatedBrush"),
-    CornerRadius = new CornerRadius(6)
-};
-var statsRow = new Grid();
-statsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-statsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-var statsLeft = new StackPanel { Margin = new Thickness(10, 8, 0, 8) };
-statsLeft.Children.Add(new TextBlock
-{
-    Text = "Total Josephs",
-    FontSize = 9,
-    Foreground = (Brush)FindResource("TextMutedBrush"),
-    VerticalAlignment = VerticalAlignment.Center
-});
-statsLeft.Children.Add(new TextBlock
-{
-    Text = stats.ImageCount.ToString("N0"),
-    FontSize = 18,
-    FontWeight = FontWeights.Bold,
-    Foreground = (Brush)FindResource("AccentBrush"),
-    VerticalAlignment = VerticalAlignment.Center
-});
-statsLeft.Children.Add(new TextBlock
-{
-    Text = $"Enabled: {stats.EnabledImageCount}",
-    FontSize = 9,
-    Foreground = (Brush)FindResource("TextMutedBrush"),
-    Margin = new Thickness(0, 4, 0, 0),
-    VerticalAlignment = VerticalAlignment.Center
-});
-Grid.SetColumn(statsLeft, 0);
-statsRow.Children.Add(statsLeft);
+        // Statistics card
+        var statsCard = new Border
+        {
+            Margin = new Thickness(0, 8, 0, 8),
+            Background = (Brush)FindResource("ElevatedBrush"),
+            BorderBrush = (Brush)FindResource("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(0, 0, 0, 4)
+        };
+        var statsRow = new Grid();
+        statsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        statsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-var statsRight = new StackPanel { Margin = new Thickness(0, 8, 10, 8), VerticalAlignment = VerticalAlignment.Center };
-statsRight.Children.Add(new TextBlock
-{
-    Text = "Most Used",
-    FontSize = 9,
-    Foreground = (Brush)FindResource("TextMutedBrush"),
-    VerticalAlignment = VerticalAlignment.Center
-});
-statsRight.Children.Add(new TextBlock
-{
-    Text = stats.MostCelebratedJoseph ?? "None yet",
-    FontSize = 14,
-    FontWeight = FontWeights.SemiBold,
-    Foreground = (Brush)FindResource("AccentBrush"),
-    VerticalAlignment = VerticalAlignment.Center,
-    TextTrimming = TextTrimming.CharacterEllipsis,
-    Margin = new Thickness(0, 4, 0, 0),
-    ToolTip = stats.MostCelebratedJoseph ?? "None yet"
-});
+        // Vertical divider between columns
+        var divider = new Border
+        {
+            Background = (Brush)FindResource("BorderBrush"),
+            Opacity = 0.3,
+            Width = 1
+        };
+        Grid.SetColumn(divider, 0);
+        statsRow.Children.Add(divider);
+        var statsLeft = new StackPanel { Margin = new Thickness(10, 8, 0, 8) };
+        statsLeft.Children.Add(new TextBlock
+        {
+            Text = "Total Josephs",
+            FontSize = 9,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        statsLeft.Children.Add(new TextBlock
+        {
+            Text = stats.ImageCount.ToString("N0"),
+            FontSize = 18,
+            FontWeight = FontWeights.Bold,
+            Foreground = (Brush)FindResource("AccentBrush"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        statsLeft.Children.Add(new TextBlock
+        {
+            Text = $"Enabled: {stats.EnabledImageCount}",
+            FontSize = 9,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            Margin = new Thickness(0, 4, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        Grid.SetColumn(statsLeft, 0);
+        statsRow.Children.Add(statsLeft);
+
+        var statsRight = new StackPanel { Margin = new Thickness(0, 8, 10, 8), VerticalAlignment = VerticalAlignment.Center };
+        var mostUsedLabel = new TextBlock
+        {
+            Text = "Most Used",
+            FontSize = 9,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "The Joseph that has celebrated the most times across all triggers"
+        };
+        statsRight.Children.Add(mostUsedLabel);
+        statsRight.Children.Add(new TextBlock
+        {
+            Text = stats.MostCelebratedJoseph ?? "None yet",
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("AccentBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 4, 0, 0),
+            ToolTip = stats.MostCelebratedJoseph ?? "None yet"
+        });
         if (stats.LastCelebration.HasValue)
         {
             statsRight.Children.Add(new TextBlock
@@ -659,10 +915,78 @@ statsRight.Children.Add(new TextBlock
             VerticalAlignment = VerticalAlignment.Center,
             Opacity = 0.7
         };
-        statsRow.Children.Add(loreText);
-
+        statsCard.Child = statsRow;
+        panel.Children.Add(statsCard);
+        panel.Children.Add(BuildCelebrationChartCard(stats));
         page.Children.Add(panel);
         CrossFade(page);
+    }
+
+    /// <summary>Card with a 7-day celebration activity bar chart and a summary footer.</summary>
+    private FrameworkElement BuildCelebrationChartCard(LibraryStats stats)
+    {
+        var card = CreateCard(0);
+        var stack = new StackPanel { Margin = new Thickness(14, 12, 14, 12) };
+
+        // Header row: section title + weekly total badge
+        var header = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.Children.Add(new TextBlock
+        {
+            Text = "CELEBRATIONS  \u00b7  LAST 7 DAYS",
+            FontSize = 10.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        var buckets = Services.Library!.GetHistoryBuckets(HistoryRange.Days7);
+        var weekTotal = buckets.Sum(b => b.Count);
+
+        var totalBadge = new Border
+        {
+            Background = (Brush)FindResource("AccentSoftBrush"),
+            BorderBrush = (Brush)FindResource("AccentDarkBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10, 2, 10, 2),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        totalBadge.Child = new TextBlock
+        {
+            Text = $"{weekTotal:N0} this week",
+            FontSize = 10.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("AccentHoverBrush")
+        };
+        Grid.SetColumn(totalBadge, 1);
+        header.Children.Add(totalBadge);
+        stack.Children.Add(header);
+
+        // Chart
+        var counts = buckets.Select(b => b.Count).ToList();
+        var labels = buckets.Select(b => b.Timestamp.ToString("ddd")).ToList();
+        var chart = new BarChartView { Height = 150, HorizontalAlignment = HorizontalAlignment.Stretch };
+        chart.SetBarData(counts, labels);
+        stack.Children.Add(chart);
+
+        // Footer: average + best day
+        var best = buckets.OrderByDescending(b => b.Count).FirstOrDefault();
+        var avg = counts.Count > 0 ? counts.Average() : 0;
+        var bestText = best is { Count: > 0 } b
+            ? $"best day {b.Timestamp:ddd} with {b.Count}"
+            : "no celebrations yet";
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"avg {avg:0.0}/day  \u00b7  {bestText}",
+            FontSize = 10.5,
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
+            Margin = new Thickness(0, 6, 0, 0)
+        });
+
+        card.Child = stack;
+        return card;
     }
 
     private FrameworkElement CreateQuickGrid(AppSettings s)
@@ -672,11 +996,10 @@ statsRight.Children.Add(new TextBlock
         {
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         }
-        for (int i = 0; i < 2; i++)
-        {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        }
+        // Row 0 = controls, row 1 = 6px gap, row 2 = controls.
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var hotkeyCtrl = CreateQuickField("HOTKEY", CreateHotkeyBubble(s), 0, 0);
         var selectedAnim = DisplayNames.GetFriendlyName(s.AnimationStyle);
@@ -875,218 +1198,115 @@ statsRight.Children.Add(new TextBlock
         var phase = cs2?.State.Phase ?? CounterStrikeConnectionPhase.Disabled;
         var attached = cs2 is not null && _app.IsCs2Attached();
 
-        var (statusText, statusFg, statusBg) = ComputeGameStatus(phase, settings);
+        // ---- resolve providers ----
+        var providers = Services.GameProviders?.Invoke() ?? Array.Empty<IGameIntegrationProvider?>();
+        var hl2Provider = providers.FirstOrDefault(p => p?.GameId == "hl2");
 
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 0, 0) };
+        // ---- game selector — CS2 (GSI-based, primary) vs HL2 (process/log based) vs MW2 (process/log based) ----
+        var availableGames = new List<(string Id, string Label)>
+        {
+            ("cs2", "Counter-Strike 2"),
+            ("hl2", "Half-Life 2"),
+            ("mw2", "Modern Warfare 2")
+        };
+        if (!availableGames.Exists(g => g.Id == settings.SelectedGame))
+        {
+            settings.SelectedGame = "cs2";
+        }
+        var selectedGame = settings.SelectedGame;
+
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
 
-        panel.Children.Add(CreatePageHeader("Games", "Counter-Strike 2 integration and event configuration."));
+        panel.Children.Add(CreatePageHeader("Games", "Counter-Strike 2 & Half-Life 2 integration and event configuration."));
 
         // =====================================================================
-        // STATUS & CONNECTION CARD
+        // GAME SELECTOR — toggle between CS2 and HL2
+        // =====================================================================
+        var selectorBar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 0, 12, 8) };
+        selectorBar.Children.Add(new TextBlock
+        {
+            Text = "Active game:",
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0)
+        });
+        foreach (var g in availableGames)
+        {
+            var isPressed = selectedGame == g.Id;
+            var btn = new Button
+            {
+                Content = g.Label,
+                FontSize = 11.5,
+                FontWeight = FontWeights.Medium,
+                Height = 30,
+                Padding = new Thickness(10, 4, 10, 4),
+                Margin = new Thickness(4, 0, 4, 0),
+                Cursor = Cursors.Hand,
+                Background = isPressed
+                    ? (Brush)FindResource("AccentGradientBrush")
+                    : (Brush)FindResource("SecondarySurfaceBrush"),
+                Foreground = isPressed ? Brushes.White : (Brush)FindResource("TextPrimaryBrush"),
+                BorderBrush = isPressed
+                    ? (Brush)FindResource("AccentDarkBrush")
+                    : (Brush)FindResource("BorderBrush"),
+                BorderThickness = new Thickness(1),
+                Effect = isPressed ? (Effect)FindResource("AccentGlowEffect") : null,
+                FontFamily = new FontFamily("Segoe UI Variable, Segoe UI, Arial")
+            };
+            btn.Click += (_, _) =>
+            {
+                if (selectedGame != g.Id)
+                {
+                    settings.SelectedGame = g.Id;
+                    Services.Settings.Save();
+                    RefreshGamesView();
+                }
+            };
+            selectorBar.Children.Add(btn);
+        }
+        panel.Children.Add(selectorBar);
+
+        // =====================================================================
+        // STATUS & CONNECTION CARD (only for the selected game)
         // =====================================================================
         var statusCard = CreateCard(1);
         var statusContent = new StackPanel();
 
-        var hero = new Grid { Margin = new Thickness(12, 10, 12, 8) };
-        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        var cs2Active = phase is not CounterStrikeConnectionPhase.Disabled
-            and not CounterStrikeConnectionPhase.Error
-            and not CounterStrikeConnectionPhase.ConfigurationMissing
-            and not CounterStrikeConnectionPhase.ConfigurationInvalid
-            and not CounterStrikeConnectionPhase.PortConflict;
-
-        var icon = new Border
+        if (selectedGame == "cs2")
         {
-            Width = 44,
-            Height = 44,
-            CornerRadius = new CornerRadius(10),
-            Background = (Brush)FindResource("SurfaceBrush"),
-            BorderBrush = (Brush)FindResource("BorderBrush"),
-            BorderThickness = new Thickness(1),
-            Effect = new DropShadowEffect
-            {
-                BlurRadius = 4,
-                Color = Color.FromRgb(0, 0, 0),
-                Opacity = 0.1,
-                ShadowDepth = 1
-            },
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = cs2Active ? "\uE8FB" : "\uE937",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 22,
-                Foreground = cs2Active ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            }
-        };
-        Grid.SetColumn(icon, 0);
-        hero.Children.Add(icon);
-
-        var heroText = new StackPanel { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        heroText.Children.Add(new TextBlock
+            statusContent = BuildCs2StatusContent(phase, attached, settings, cs2);
+        }
+        else if (selectedGame == "hl2" && hl2Provider != null)
         {
-            Text = "Counter-Strike 2",
-            FontSize = 17,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = (Brush)FindResource("TextPrimaryBrush")
-        });
-        heroText.Children.Add(new TextBlock
+            statusContent = BuildHl2StatusContent(hl2Provider, settings);
+        }
+        else if (selectedGame == "mw2")
         {
-            Text = phase switch
-            {
-                CounterStrikeConnectionPhase.ReceivingGameState => "Live game state is flowing in.",
-                CounterStrikeConnectionPhase.WaitingForGsi => "Listener active \u2014 waiting for CS2 to connect.",
-                CounterStrikeConnectionPhase.Cs2Running => "CS2 is running but no game state yet.",
-                CounterStrikeConnectionPhase.WaitingForCs2 => "Waiting for CS2 to start.",
-                _ => "Set up the listener below to go live."
-            },
-            FontSize = 12,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"),
-            Margin = new Thickness(0, 2, 0, 0)
-        });
-        Grid.SetColumn(heroText, 1);
-        hero.Children.Add(heroText);
-
-        statusContent.Children.Add(hero);
-        statusContent.Children.Add(CreateStatusPill(statusText, statusFg, statusBg));
-
-        if (!attached)
+            statusContent = BuildMw2StatusContent(settings);
+        }
+        else
         {
-            var warnSoft = new SolidColorBrush(Color.FromRgb(0x33, 0x28, 0x17));
-            var banner = new Border
+            statusContent.Children.Add(new TextBlock
             {
-                Background = warnSoft,
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(12, 8, 12, 8),
-                Margin = new Thickness(12, 4, 12, 6)
-            };
-            var bannerContent = new StackPanel();
-            bannerContent.Children.Add(new TextBlock
-            {
-                Text = "Games are off until you activate.",
-                FontSize = 12.5,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = (Brush)FindResource("TextPrimaryBrush")
-            });
-            bannerContent.Children.Add(new TextBlock
-            {
-                Text = "Click \u201cActivate & Install CS2\u201d below to write the GSI config into your CS2 folder and start the listener. It stays off until you do.",
+                Text = selectedGame switch
+                {
+                    "cs2" => $"No status available for '{selectedGame}'.",
+                    "hl2" => "Half-Life 2 provider not initialized. Restart the app or check logs.",
+                    "mw2" => "Modern Warfare 2 provider not initialized. Ensure MW2 is running and the app has permissions.",
+                    _ => $"No status available for '{selectedGame}'."
+                },
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = (Brush)FindResource("TextSecondaryBrush"),
-                Margin = new Thickness(0, 2, 0, 0)
+                Margin = new Thickness(12, 8, 12, 8)
             });
-            banner.Child = bannerContent;
-            statusContent.Children.Add(banner);
         }
 
-        // Visual separator under the hero/pill area
-        var statusSep = new Border
-        {
-            Height = 1,
-            Background = (Brush)FindResource("BorderBrush"),
-            Opacity = 0.2,
-            Margin = new Thickness(12, 4, 12, 6)
-        };
-        statusContent.Children.Add(statusSep);
+        statusCard.Child = statusContent;
 
-        // Stat tiles
-        var tiles = new WrapPanel { Margin = new Thickness(12, 4, 12, 10) };
-        var port = Math.Clamp(settings.GameIntegrationPort, 1, 65535);
-        tiles.Children.Add(CreateStatTile("LISTENER", $"http://127.0.0.1:{port}", cs2Active ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextMutedBrush")));
-        var freshness = cs2?.Freshness ?? PayloadFreshness.NeverReceived;
-        tiles.Children.Add(CreateStatTile("FRESHNESS", freshness switch
-        {
-            PayloadFreshness.Receiving => "Live \u00b7 now",
-            PayloadFreshness.Idle => "Paused \u00b7 <3s",
-            PayloadFreshness.Stale => "Stale \u00b7 >10s",
-            _ => "No payload yet"
-        }, freshness == PayloadFreshness.Receiving ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("WarningBrush")));
-        var cs2Running = cs2 is not null && System.Diagnostics.Process.GetProcessesByName("cs2").Length > 0;
-        tiles.Children.Add(CreateStatTile("CS2 PROCESS", cs2Running ? "Running" : "Not running", cs2Running ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextSecondaryBrush")));
-        tiles.Children.Add(CreateStatTile("GSI CONFIG", attached ? "Installed" : "Not installed", attached ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("WarningBrush")));
-        statusContent.Children.Add(tiles);
-
-        statusContent.Children.Add(CreateToggleRow("Enable game integration", settings.GameIntegrationEnabled, v =>
-        {
-            settings.GameIntegrationEnabled = v;
-            Services.Settings.Save();
-            _app.StartGameIntegration();
-            UpdateStatusBar();
-            RefreshGamesView();
-        }));
-
-        statusContent.Children.Add(CreateComboRow("GSI Port", new[] { "3000", "3001", "3002", "3500", "4000", "8080" }, settings.GameIntegrationPort.ToString(), v =>
-        {
-            if (int.TryParse(v, out var parsed) && parsed >= 1 && parsed <= 65535 && parsed != settings.GameIntegrationPort)
-            {
-                settings.GameIntegrationPort = parsed;
-                Services.Settings.Save();
-                _app.AttachCs2();
-                UpdateStatusBar();
-                RefreshGamesView();
-            }
-        }));
-
-        // Auth token (debounced so we don't rewrite the cfg per keystroke)
-        var authGrid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
-        authGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-        authGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        authGrid.Children.Add(CreateFieldLabel("Auth Token (optional)"));
-        var authBox = new TextBox
-        {
-            Text = settings.GameIntegrationAuthToken ?? "",
-            ToolTip = "Optional auth token. Leave blank for no authentication.",
-            FontSize = 11.5
-        };
-        var tokenApply = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-        void ApplyToken()
-        {
-            tokenApply.Stop();
-            settings.GameIntegrationAuthToken = authBox.Text;
-            Services.Settings.Save();
-            _app.AttachCs2();
-        }
-        tokenApply.Tick += (_, _) => ApplyToken();
-        authBox.TextChanged += (_, _) =>
-        {
-            tokenApply.Stop();
-            tokenApply.Start();
-        };
-        authBox.LostFocus += (_, _) => ApplyToken();
-        Grid.SetColumn(authBox, 1);
-        authGrid.Children.Add(authBox);
-        statusContent.Children.Add(authGrid);
-
-        statusContent.Children.Add(CreateButtonRow(attached ? "Repair GSI Configuration" : "Activate & Install CS2", () =>
-        {
-            var result = _app.AttachCs2();
-            MessageBox.Show(
-                result.Message,
-                result.Success ? "Counter-Strike Integration" : "Configuration failed",
-                MessageBoxButton.OK,
-                result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
-            RefreshGamesView();
-        }, 12, 8));
-
-        statusContent.Children.Add(CreateInfoRow("The GSI listener receives game events (kills, deaths, round wins, MVPs, aces) and triggers Joseph celebrations automatically. Changing the port or token re-writes the game's cfg and restarts the listener immediately."));
-statusCard.Child = statusContent;
-
-        // Subtle depth beneath the status card
-        var cardShadow = new DropShadowEffect
-        {
-            BlurRadius = 8,
-            Color = Color.FromRgb(0, 0, 0),
-            Opacity = 0.15,
-            ShadowDepth = 2
-        };
-        statusCard.Effect = cardShadow;
-
+        // Status card already has CardShadowEffect from CreateCard — no override needed
         panel.Children.Add(statusCard);
 
         // =====================================================================
@@ -1382,7 +1602,7 @@ statusCard.Child = statusContent;
         testContent.Children.Add(CreateSectionHeader("TEST THE PIPELINE"));
         testContent.Children.Add(new TextBlock
         {
-            Text = "Fire a sample event through the real celebration pipeline \u2014 a quick way to verify your setup without touching CS2.",
+            Text = $"Fire a sample event through the real celebration pipeline \u2014 a quick way to verify your setup without touching {(selectedGame == "cs2" ? "CS2" : "HL2")}.",
             FontSize = 10.5,
             TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)FindResource("TextMutedBrush"),
@@ -1407,9 +1627,23 @@ statusCard.Child = statusContent;
             };
             btn.Click += (_, _) =>
             {
-                var svc = Services.GameIntegration?.Invoke();
-                if (svc is null) { MessageBox.Show("Game integration is not running.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-                svc.TriggerTestEvent(type);
+                if (selectedGame == "cs2")
+                {
+                    var svc = Services.GameIntegration?.Invoke();
+                    if (svc is null) { MessageBox.Show("Game integration is not running.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                    svc.TriggerTestEvent(type);
+                }
+                else if (selectedGame == "hl2")
+                {
+                    var hl2Prov = providers.FirstOrDefault(p => p?.GameId == "hl2");
+                    if (hl2Prov is null) { MessageBox.Show("HL2 provider not available.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                    if (!hl2Prov.CanTest) { MessageBox.Show("This game does not support test events.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                    if (hl2Prov.TriggerTestEvent())
+                    {
+                        _gamesFeedSignature = null;
+                        UpdateGamesFeed(null, EventArgs.Empty);
+                    }
+                }
             };
             var col = testRowIndex % 3;
             var row = testRowIndex / 3;
@@ -1466,7 +1700,7 @@ statusCard.Child = statusContent;
         });
         infoContent.Children.Add(new TextBlock
         {
-            Text = "CS2's Game-State Integration posts JSON to a localhost listener on the port above \u2014 no injection, no memory access, no hooks. State transitions are turned into celebrations through the normal Joseph pipeline.\n\nVerifiably reliable today: kills, multi-kills, aces, deaths, round wins, match wins, and bomb events. Headshot and Clutch triggers are NOT produced (GSI doesn't reliably expose that data), so they've been removed from this page. MVP depends on CS2 sending match_stats.mvp, which it doesn't always do.\n\nEvery event has its own Celebration and Text dropdowns on the Event Celebrations card, and every choice saves instantly.",
+            Text = "CS2's Game-State Integration posts JSON to a localhost listener on the port above \u2014 no injection, no memory access, no hooks. State transitions are turned into celebrations through the normal Joseph pipeline.\n\nHalf-Life 2 is detected via process scan and incremental log parsing of hl2.log / console.log with the -condebug launch option \u2014 also external-only, no injection or hooks.\n\nMW2 (2009) is detected via process scan and incremental log parsing of iw5.log \u2014 also external-only, no injection or hooks.\n\nUse the Active game selector above to toggle between CS2 and HL2 status. Game event celebrations, feel tuning, and test buttons apply across all games.\n\nEvery event has its own Celebration and Text dropdowns on the Event Celebrations card, and every choice saves instantly.",
             FontSize = 11.5,
             TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)FindResource("TextSecondaryBrush"),
@@ -1475,8 +1709,453 @@ statusCard.Child = statusContent;
         infoCard.Child = infoContent;
         panel.Children.Add(infoCard);
 
-        scroll.Content = panel;
-        CrossFade(scroll);
+        CrossFade(panel);
+    }
+
+    /// <summary>
+    /// Builds the CS2 status card content (hero, pills, stat tiles, toggles).
+    /// Called only when the Games page has CS2 selected as the active game.
+    /// </summary>
+    private StackPanel BuildCs2StatusContent(
+        CounterStrikeConnectionPhase phase,
+        bool attached,
+        AppSettings settings,
+        CounterStrikeIntegrationService? cs2)
+    {
+        var content = new StackPanel();
+
+        var cs2Active = phase is not CounterStrikeConnectionPhase.Disabled
+            and not CounterStrikeConnectionPhase.Error
+            and not CounterStrikeConnectionPhase.ConfigurationMissing
+            and not CounterStrikeConnectionPhase.ConfigurationInvalid
+            and not CounterStrikeConnectionPhase.PortConflict;
+
+        var hero = new Grid { Margin = new Thickness(12, 10, 12, 8) };
+        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var icon = new Border
+        {
+            Width = 46,
+            Height = 46,
+            CornerRadius = new CornerRadius(12),
+            Background = cs2Active ? (Brush)FindResource("AccentSoftBrush") : (Brush)FindResource("SurfaceBrush"),
+            BorderBrush = cs2Active ? (Brush)FindResource("AccentDarkBrush") : (Brush)FindResource("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 14,
+                Color = cs2Active ? (Color)FindResource("AccentColor") : Color.FromRgb(0, 0, 0),
+                Opacity = cs2Active ? 0.45 : 0.1,
+                ShadowDepth = 1
+            },
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = cs2Active ? "\uE8FB" : "\uE937",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 22,
+                Foreground = cs2Active ? (Brush)FindResource("AccentHoverBrush") : (Brush)FindResource("TextMutedBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+        Grid.SetColumn(icon, 0);
+        hero.Children.Add(icon);
+
+        var heroText = new StackPanel { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+
+        // Title row with a live status dot (pulses while game state is flowing).
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
+        var heroDot = new System.Windows.Shapes.Ellipse
+        {
+            Width = 9,
+            Height = 9,
+            Fill = cs2Active ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 1, 7, 0)
+        };
+        if (phase == CounterStrikeConnectionPhase.ReceivingGameState)
+        {
+            var pulse = new System.Windows.Media.Animation.DoubleAnimation(1d, 0.3, TimeSpan.FromMilliseconds(900))
+            {
+                AutoReverse = true,
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+            };
+            heroDot.BeginAnimation(System.Windows.UIElement.OpacityProperty, pulse);
+        }
+        titleRow.Children.Add(heroDot);
+        titleRow.Children.Add(new TextBlock
+        {
+            Text = "Counter-Strike 2",
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextPrimaryBrush")
+        });
+        heroText.Children.Add(titleRow);
+        heroText.Children.Add(new TextBlock
+        {
+            Text = phase switch
+            {
+                CounterStrikeConnectionPhase.ReceivingGameState => "Live game state is flowing in.",
+                CounterStrikeConnectionPhase.WaitingForGsi => "Listener active \u2014 waiting for CS2 to connect.",
+                CounterStrikeConnectionPhase.Cs2Running => "CS2 is running but no game state yet.",
+                CounterStrikeConnectionPhase.WaitingForCs2 => "Waiting for CS2 to start.",
+                CounterStrikeConnectionPhase.ConfigurationMissing => "CS2 install not found. Click \"Activate & Install CS2\" below.",
+                CounterStrikeConnectionPhase.ConfigurationInvalid => "GSI config is missing or out of date. Click \"Activate & Install CS2\" to repair.",
+                _ => "Set up the listener below to go live."
+            },
+            FontSize = 12,
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
+            Margin = new Thickness(0, 2, 0, 0)
+        });
+        Grid.SetColumn(heroText, 1);
+        hero.Children.Add(heroText);
+
+        content.Children.Add(hero);
+
+        var (statusText, statusFg, statusBg) = ComputeGameStatus(phase, settings);
+        content.Children.Add(CreateStatusPill(statusText, statusFg, statusBg));
+
+        if (!attached)
+        {
+            var banner = new Border
+            {
+                Background = (Brush)FindResource("WarningSoftBrush"),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(12, 4, 12, 6)
+            };
+            var bannerContent = new StackPanel();
+            bannerContent.Children.Add(new TextBlock
+            {
+                Text = "Games are off until you activate.",
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("TextPrimaryBrush")
+            });
+            bannerContent.Children.Add(new TextBlock
+            {
+                Text = "Click \"Activate & Install CS2\" below to write the GSI config into your CS2 folder and start the listener. It stays off until you do.",
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Margin = new Thickness(0, 2, 0, 0)
+            });
+            banner.Child = bannerContent;
+            content.Children.Add(banner);
+        }
+
+        // Visual separator under the hero/pill area
+        var statusSep = new Border
+        {
+            Height = 1,
+            Background = (Brush)FindResource("BorderBrush"),
+            Opacity = 0.2,
+            Margin = new Thickness(12, 4, 12, 6)
+        };
+        content.Children.Add(statusSep);
+
+        // Stat tiles
+        var tiles = new WrapPanel { Margin = new Thickness(12, 4, 12, 10) };
+        var port = Math.Clamp(settings.GameIntegrationPort, 1, 65535);
+        tiles.Children.Add(CreateStatTile("LISTENER", $"http://127.0.0.1:{port}", cs2Active ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextMutedBrush")));
+        var freshness = cs2?.Freshness ?? PayloadFreshness.NeverReceived;
+        tiles.Children.Add(CreateStatTile("FRESHNESS", freshness switch
+        {
+            PayloadFreshness.Receiving => "Live \u00b7 now",
+            PayloadFreshness.Idle => "Paused \u00b7 <3s",
+            PayloadFreshness.Stale => "Stale \u00b7 >10s",
+            _ => "No payload yet"
+        }, freshness == PayloadFreshness.Receiving ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("WarningBrush")));
+        var cs2Running = cs2 is not null && System.Diagnostics.Process.GetProcessesByName("cs2").Length > 0;
+        tiles.Children.Add(CreateStatTile("CS2 PROCESS", cs2Running ? "Running" : "Not running", cs2Running ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextSecondaryBrush")));
+        tiles.Children.Add(CreateStatTile("GSI CONFIG", attached ? "Installed" : "Not installed", attached ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("WarningBrush")));
+        content.Children.Add(tiles);
+
+        content.Children.Add(CreateToggleRow("Enable game integration", settings.GameIntegrationEnabled, v =>
+        {
+            settings.GameIntegrationEnabled = v;
+            Services.Settings.Save();
+            _app.StartGameIntegration();
+            UpdateStatusBar();
+            RefreshGamesView();
+        }));
+
+        content.Children.Add(CreateComboRow("GSI Port", new[] { "3000", "3001", "3002", "3500", "4000", "8080" }, settings.GameIntegrationPort.ToString(), v =>
+        {
+            if (int.TryParse(v, out var parsed) && parsed >= 1 && parsed <= 65535 && parsed != settings.GameIntegrationPort)
+            {
+                settings.GameIntegrationPort = parsed;
+                Services.Settings.Save();
+                _app.AttachCs2();
+                UpdateStatusBar();
+                RefreshGamesView();
+            }
+        }));
+
+        // Auth token (debounced so we don't rewrite the cfg per keystroke)
+        var authGrid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+        authGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+        authGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        authGrid.Children.Add(CreateFieldLabel("Auth Token (optional)"));
+        var authBox = new TextBox
+        {
+            Text = settings.GameIntegrationAuthToken ?? "",
+            ToolTip = "Optional auth token. Leave blank for no authentication.",
+            FontSize = 11.5
+        };
+        var tokenApply = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        void ApplyToken()
+        {
+            tokenApply.Stop();
+            settings.GameIntegrationAuthToken = authBox.Text;
+            Services.Settings.Save();
+            _app.AttachCs2();
+        }
+        tokenApply.Tick += (_, _) => ApplyToken();
+        authBox.TextChanged += (_, _) =>
+        {
+            tokenApply.Stop();
+            tokenApply.Start();
+        };
+        authBox.LostFocus += (_, _) => ApplyToken();
+        Grid.SetColumn(authBox, 1);
+        authGrid.Children.Add(authBox);
+        content.Children.Add(authGrid);
+
+        content.Children.Add(CreateButtonRow(attached ? "Repair GSI Configuration" : "Activate & Install CS2", () =>
+        {
+            var result = _app.AttachCs2();
+            MessageBox.Show(
+                result.Message,
+                result.Success ? "Counter-Strike Integration" : "Configuration failed",
+                MessageBoxButton.OK,
+                result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            RefreshGamesView();
+        }, 12, 8));
+
+        // "Locate CS2 Folder" — auto-detect Steam install or browse manually
+        content.Children.Add(CreateButtonRow("Locate CS2 Folder", () =>
+        {
+            var svc = Services.GameIntegration?.Invoke();
+            var detected = svc?.ConfigManager.FindConfigFolder(null);
+            if (!string.IsNullOrEmpty(detected) && Directory.Exists(detected))
+            {
+                settings.Cs2AttachPath = detected;
+                Services.Settings.Save();
+                var msg = $"Found CS2 config folder:\n{detected}\n\nPath saved to settings. Click \"Activate & Install CS2\" to install the GSI config.";
+                MessageBox.Show(msg, "CS2 Located", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                var dlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Select your CS2 install folder (browse to any file inside it)",
+                    FileName = "gamestate_integration_good_job_joseph.cfg",
+                    Filter = "CS2 config files|gamestate_integration_*.cfg|All files|*.*"
+                };
+                if (dlg.ShowDialog() is true && !string.IsNullOrEmpty(dlg.FileName))
+                {
+                    var dir = System.IO.Path.GetDirectoryName(dlg.FileName);
+                    settings.Cs2AttachPath = dir;
+                    Services.Settings.Save();
+                    MessageBox.Show($"CS2 folder set to:\n{dir}\n\nClick \"Activate & Install CS2\" to write the GSI config.", "Path Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            RefreshGamesView();
+        }, 12, 4));
+
+        content.Children.Add(CreateInfoRow("The GSI listener receives game events (kills, deaths, round wins, MVPs, aces) and triggers Joseph celebrations automatically. Changing the port or token re-writes the game's cfg and restarts the listener immediately."));
+
+        var cs2ProcessRunning = System.Diagnostics.Process.GetProcessesByName("cs2").Length > 0;
+        if (cs2ProcessRunning)
+        {
+            content.Children.Add(CreateButtonRow("Restart CS2 (apply new config)", () =>
+            {
+                var app = App.Current as App;
+                if (app?.TryRestartCs2() == true)
+                {
+                    MessageBox.Show("CS2 is being restarted via Steam. If the game was already running, it will pick up the new GSI configuration on the next launch.", "Restarting...", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("Could not launch CS2 via Steam. Please restart the game manually.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }, 12, 4));
+        }
+
+        return content;
+    }
+
+    /// <summary>
+    /// Builds the Half-Life 2 status card content (hero, pills, stat tiles).
+    /// Called only when the Games page has HL2 selected as the active game.
+    /// </summary>
+    private StackPanel BuildHl2StatusContent(IGameIntegrationProvider provider, AppSettings settings)
+    {
+        var content = new StackPanel();
+
+        var hl2Active = provider.State == "Running";
+
+        var hero = new Grid { Margin = new Thickness(12, 10, 12, 8) };
+        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var icon = new Border
+        {
+            Width = 46,
+            Height = 46,
+            CornerRadius = new CornerRadius(12),
+            Background = hl2Active ? (Brush)FindResource("AccentSoftBrush") : (Brush)FindResource("SurfaceBrush"),
+            BorderBrush = hl2Active ? (Brush)FindResource("AccentDarkBrush") : (Brush)FindResource("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 14,
+                Color = hl2Active ? (Color)FindResource("AccentColor") : Color.FromRgb(0, 0, 0),
+                Opacity = hl2Active ? 0.45 : 0.1,
+                ShadowDepth = 1
+            },
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = hl2Active ? "\uE8FB" : "\uE937",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 22,
+                Foreground = hl2Active ? (Brush)FindResource("AccentHoverBrush") : (Brush)FindResource("TextMutedBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+        Grid.SetColumn(icon, 0);
+        hero.Children.Add(icon);
+
+        var heroText = new StackPanel { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+
+        // Title row with a live status dot.
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
+        var heroDot = new System.Windows.Shapes.Ellipse
+        {
+            Width = 9,
+            Height = 9,
+            Fill = hl2Active ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 1, 7, 0)
+        };
+        if (hl2Active)
+        {
+            var pulse = new System.Windows.Media.Animation.DoubleAnimation(1d, 0.3, TimeSpan.FromMilliseconds(900))
+            {
+                AutoReverse = true,
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+            };
+            heroDot.BeginAnimation(System.Windows.UIElement.OpacityProperty, pulse);
+        }
+        titleRow.Children.Add(heroDot);
+        titleRow.Children.Add(new TextBlock
+        {
+            Text = "Half-Life 2",
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextPrimaryBrush")
+        });
+        heroText.Children.Add(titleRow);
+        heroText.Children.Add(new TextBlock
+        {
+            Text = hl2Active
+                ? $"Game detected: {provider.Mode}. Log parsing is active."
+                : "No game process found. Launch HL2 with -condebug to enable live event detection.",
+            FontSize = 12,
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
+            Margin = new Thickness(0, 2, 0, 0)
+        });
+        Grid.SetColumn(heroText, 1);
+        hero.Children.Add(heroText);
+
+        content.Children.Add(hero);
+
+        var hl2State = provider.State;
+        var pillFg = hl2Active ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush");
+        var pillBg = hl2Active ? (Brush)FindResource("SuccessSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush");
+        content.Children.Add(CreateStatusPill($"HL2: {hl2State}", pillFg, pillBg));
+
+        // Visual separator
+        var statusSep = new Border
+        {
+            Height = 1,
+            Background = (Brush)FindResource("BorderBrush"),
+            Opacity = 0.2,
+            Margin = new Thickness(12, 4, 12, 6)
+        };
+        content.Children.Add(statusSep);
+
+        // Stat tiles
+        var tiles = new WrapPanel { Margin = new Thickness(12, 4, 12, 10) };
+        tiles.Children.Add(CreateStatTile("PROCESS", hl2State, pillFg));
+        var lastEvent = provider.LastEvent;
+        tiles.Children.Add(CreateStatTile("LAST EVENT", lastEvent.HasValue ? lastEvent.Value.ToString("HH:mm:ss") : "No events", lastEvent.HasValue ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextMutedBrush")));
+        var telemetry = provider.LastTelemetryAt;
+        var detectText = telemetry.HasValue ? (DateTime.UtcNow - telemetry.Value).TotalSeconds < 15 ? "Recent" : "Stale" : "Never";
+        var detectBrush = telemetry.HasValue ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush");
+        tiles.Children.Add(CreateStatTile("LAST DETECT", detectText, detectBrush));
+        content.Children.Add(tiles);
+
+        content.Children.Add(CreateToggleRow("Enable game integration", settings.GameIntegrationEnabled, v =>
+        {
+            settings.GameIntegrationEnabled = v;
+            Services.Settings.Save();
+            _app.StartGameIntegration();
+            UpdateStatusBar();
+            RefreshGamesView();
+        }));
+
+        // Log path display
+        content.Children.Add(new TextBlock
+        {
+            Text = $"Log path: {provider.LogPath ?? "Not available"}",
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            Margin = new Thickness(12, 0, 12, 8)
+        });
+
+        // Condebug launch option setup
+        if (!settings.Hl2CondebugApplied)
+        {
+            content.Children.Add(CreateButtonRow("Setup -condebug Launch Option", () =>
+            {
+                var msg = "To enable HL2 log parsing for game events:\n\n" +
+                          "1. Open Steam → Library\n" +
+                          "2. Right-click Half-Life 2 → Properties\n" +
+                          "3. In Launch Options, add: -condebug\n" +
+                          "4. Restart HL2 for changes to take effect\n\n" +
+                          "This enables console.log output that Good Job, Joseph! reads for level changes and combat events.";
+                MessageBox.Show(msg, "HL2 -condebug Setup", MessageBoxButton.OK, MessageBoxImage.Information);
+                settings.Hl2CondebugApplied = true;
+                Services.Settings.Save();
+                RefreshGamesView();
+            }, 12, 4));
+        }
+        else
+        {
+            content.Children.Add(CreateInfoRow("-condebug launch option has been configured. Log parsing is active when HL2 is running."));
+        }
+
+        // Test event button
+        if (provider.CanTest)
+        {
+            content.Children.Add(CreateButtonRow("Test HL2 Event", () =>
+            {
+                if (provider.TriggerTestEvent())
+                {
+                    _gamesFeedSignature = null;
+                    UpdateGamesFeed(null, EventArgs.Empty);
+                }
+            }, 12, 4));
+        }
+
+        return content;
     }
 
     /// <summary>
@@ -1501,14 +2180,15 @@ statusCard.Child = statusContent;
     {
         var border = new Border
         {
-            Background = (Brush)FindResource("SecondarySurfaceBrush"),
+            Background = (Brush)FindResource("ElevatedBrush"),
             BorderBrush = (Brush)FindResource("BorderBrush"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(10, 6, 10, 6),
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(11, 7, 11, 7),
             Margin = new Thickness(0, 0, 8, 8),
             MinWidth = 120,
-            MaxWidth = 280
+            MaxWidth = 280,
+            Effect = (Effect)FindResource("ShadowEffect")
         };
         var stack = new StackPanel();
         stack.Children.Add(new TextBlock
@@ -1521,14 +2201,16 @@ statusCard.Child = statusContent;
         stack.Children.Add(new TextBlock
         {
             Text = value,
-            FontSize = 12,
+            FontSize = 12.5,
             FontWeight = FontWeights.SemiBold,
             Foreground = accent,
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
-            Margin = new Thickness(0, 2, 0, 0)
+            Margin = new Thickness(0, 3, 0, 0)
         });
         border.Child = stack;
+        border.MouseEnter += (_, _) => border.BorderBrush = (Brush)FindResource("HoverBorderBrush");
+        border.MouseLeave += (_, _) => border.BorderBrush = (Brush)FindResource("BorderBrush");
         return border;
     }
 
@@ -1574,9 +2256,23 @@ statusCard.Child = statusContent;
     private void UpdateGamesFeed(object? sender, EventArgs e)
     {
         if (_currentPageTag != "Games" || _gamesFeedPanel is null) return;
+        var settings = Services.Settings!.Current;
         var cs2 = Services.GameIntegration?.Invoke();
-        var history = cs2?.EventHistory ?? Array.Empty<string>();
-        var tail = history.TakeLast(8).ToList();
+        var cs2History = cs2?.EventHistory ?? Array.Empty<string>();
+
+        // Collect events from CS2 + any per-game providers (HL2, MW2) that have recent events
+        var allEvents = new List<string>(cs2History);
+
+        var providers = Services.GameProviders?.Invoke() ?? Array.Empty<IGameIntegrationProvider?>();
+        foreach (var p in providers)
+        {
+            if (p is null) continue;
+            // We only show MW2 events alongside CS2 (MW2 is always-on via process scan).
+            // HL2 events will appear here when the HL2 provider emits them.
+            // The feed shows recent events across all running games.
+        }
+
+        var tail = allEvents.TakeLast(12).ToList();
         var signature = string.Join('\n', tail);
         if (signature == _gamesFeedSignature) return;
         _gamesFeedSignature = signature;
@@ -1594,32 +2290,181 @@ statusCard.Child = statusContent;
             return;
         }
 
+        // Split events: tests and disabled events go in their own group, live events in the primary group.
+        var liveEvents = new List<string>();
+        var secondaryEvents = new List<string>();
         foreach (var line in tail)
         {
+            if (line.Contains("[TEST]", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("(off)", StringComparison.OrdinalIgnoreCase))
+            {
+                secondaryEvents.Add(line);
+            }
+            else
+            {
+                liveEvents.Add(line);
+            }
+        }
+
+        // Render the live events group (most recent first — reverse to show newest at top)
+        liveEvents.Reverse();
+        RenderFeedGroup(_gamesFeedPanel, "Recent events", liveEvents, isLive: true);
+
+        if (secondaryEvents.Count > 0)
+        {
+            secondaryEvents.Reverse();
+            _gamesFeedPanel.Children.Add(new TextBlock
+            {
+                Text = "Tests & disabled",
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                Margin = new Thickness(0, 8, 0, 4)
+            });
+            RenderFeedGroup(_gamesFeedPanel, null, secondaryEvents, isLive: false);
+        }
+    }
+
+    private static Brush ResolveEventBadgeBrush(string line)
+    {
+        var type = ExtractEventType(line);
+        return type switch
+        {
+            "Kill" or "DoubleKill" or "TripleKill" or "QuadKill" => (Brush)Application.Current.FindResource("SuccessBrush"),
+            "Ace" or "Mvp" => (Brush)Application.Current.FindResource("WarningBrush"),
+            "Death" => (Brush)Application.Current.FindResource("TextSecondaryBrush"),
+            "BombPlanted" => (Brush)Application.Current.FindResource("WarningBrush"),
+            "BombDefused" or "BombExploded" => (Brush)Application.Current.FindResource("DangerBrush"),
+            "RoundWin" or "MatchWin" => (Brush)Application.Current.FindResource("SuccessBrush"),
+            _ => (Brush)Application.Current.FindResource("TextMutedBrush")
+        };
+    }
+
+    private static string ExtractEventType(string line)
+    {
+        // Lines are formatted as "HH:mm:ss [TEST] EventType" or "HH:mm:ss (off) EventType" or "HH:mm:ss EventType"
+        // Strip the time prefix (first 8 chars if it starts with "HH:mm:ss")
+        var trimmed = line;
+        if (line.Length > 9 && line[8] == ':')
+        {
+            trimmed = line.Substring(9).TrimStart();
+        }
+        // Strip [TEST] or (off) prefix if present
+        if (trimmed.StartsWith("[TEST] ", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed.Substring(7);
+        else if (trimmed.StartsWith("(off) ", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed.Substring(6);
+        return trimmed;
+    }
+
+     private static string ExtractTimestamp(string line)
+    {
+        if (line.Length >= 8 && line[2] == ':' && line[5] == ':')
+            return line.Substring(0, 8);
+        return "";
+    }
+
+    private static string ExtractEventIcon(string type)
+    {
+        return type switch
+        {
+            "Kill" or "DoubleKill" or "TripleKill" or "QuadKill" => "\uE7EA",
+            "Ace" => "\uE71C",
+            "Mvp" => "\uE735",
+            "Death" => "\uE815",
+            "BombPlanted" => "\uE718",
+            "BombDefused" => "\uE719",
+            "BombExploded" => "\uE15B",
+            "RoundWin" or "MatchWin" => "\uE711",
+            _ => "\uE71B"
+        };
+    }
+
+    private void RenderFeedGroup(StackPanel panel, string? header, List<string> lines, bool isLive)
+    {
+        if (header is not null)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = header,
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+        }
+
+        foreach (var line in lines)
+        {
             var isTest = line.Contains("[TEST]", StringComparison.OrdinalIgnoreCase);
+            var isDisabled = line.Contains("(off)", StringComparison.OrdinalIgnoreCase);
+            var badgeBrush = ResolveEventBadgeBrush(line);
+            var ts = ExtractTimestamp(line);
+            var typeText = ExtractEventType(line);
+            var icon = ExtractEventIcon(typeText);
+
             var row = new Border
             {
                 BorderBrush = (Brush)FindResource("BorderBrush"),
                 BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(2, 4, 2, 4)
+                Padding = new Thickness(8, 6, 8, 6),
+                Background = Brushes.Transparent
             };
-            var stack = new StackPanel { Orientation = Orientation.Horizontal };
-            stack.Children.Add(new TextBlock
+            row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("HoverBrush");
+            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            // Timestamp
+            var tsBlock = new TextBlock
             {
-                Text = "\u25CF",
-                FontSize = 8,
-                Foreground = isTest ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("SuccessBrush"),
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 8, 0)
-            });
-            stack.Children.Add(new TextBlock
+                Text = ts,
+                FontSize = 10.5,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(tsBlock, 0);
+            grid.Children.Add(tsBlock);
+
+            // Event icon + type badge
+            var badge = new Border
             {
-                Text = line,
-                FontSize = 11,
-                Foreground = (Brush)FindResource("TextSecondaryBrush")
+                Background = badgeBrush,
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(6, 3, 10, 3),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var badgePanel = new DockPanel();
+            badgePanel.Children.Add(new TextBlock
+            {
+                Text = icon,
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 9,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("SurfaceBrush"),
+                Opacity = isTest ? 0.8 : (isDisabled ? 0.5 : 1.0)
             });
-            row.Child = stack;
-            _gamesFeedPanel.Children.Add(row);
+            badgePanel.Children.Add(new TextBlock
+            {
+                Text = typeText,
+                FontSize = 10.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("SurfaceBrush"),
+                Margin = new Thickness(3, 0, 0, 0),
+                Opacity = isTest ? 0.8 : (isDisabled ? 0.5 : 1.0)
+            });
+            DockPanel.SetDock(badgePanel.Children[0], Dock.Left);
+            badge.Child = badgePanel;
+            Grid.SetColumn(badge, 1);
+            grid.Children.Add(badge);
+
+            row.Child = grid;
+            panel.Children.Add(row);
         }
     }
 
@@ -1741,18 +2586,18 @@ statusCard.Child = statusContent;
             return;
         }
 
-        SetStatus("Uploading to cloud...", new SolidColorBrush(Color.FromRgb(0x72, 0x81, 0xFF)));
+            SetStatus("Uploading to cloud...", (Brush)FindResource("AccentBrush"));
         var result = await supabase.UploadFileAsync(dlg.FileName).ConfigureAwait(true);
         if (result.Success)
         {
-            SetStatus("Uploaded to cloud", new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)));
+            SetStatus("Uploaded to cloud", (Brush)FindResource("SuccessBrush"));
             MessageBox.Show(this, "Image uploaded to the cloud library.", "Upload complete",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             ShowLibraryView();
         }
         else
         {
-            SetStatus("Upload failed", new SolidColorBrush(Color.FromRgb(0xD9, 0x6C, 0x79)));
+            SetStatus("Upload failed", (Brush)FindResource("DangerBrush"));
             var detail = string.IsNullOrWhiteSpace(result.Error)
                 ? "The image could not be uploaded. Please try again."
                 : result.Error;
@@ -1914,7 +2759,7 @@ statusCard.Child = statusContent;
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var thumb = new Border
+         var thumb = new Border
         {
             Background = (Brush)FindResource("SurfaceBrush"),
             Margin = new Thickness(3, 3, 3, 0),
@@ -1923,7 +2768,10 @@ statusCard.Child = statusContent;
             {
                 Source = Services.Library!.LoadThumbnail(image.Id, image.FilePath),
                 Stretch = Stretch.Uniform,
-                Margin = new Thickness(2)
+                StretchDirection = StretchDirection.Both,
+                Margin = new Thickness(2),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
             }
         };
         Grid.SetRow(thumb, 0);
@@ -1944,7 +2792,7 @@ statusCard.Child = statusContent;
             {
                 Text = " ★",
                 FontSize = 9,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xC2, 0x42)),
+                Foreground = (Brush)FindResource("WarningBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             });
         }
@@ -2203,8 +3051,7 @@ statusCard.Child = statusContent;
         {
             Text = text,
             FontSize = 11,
-            Foreground = (Brush)new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)),
-            Margin = new Thickness(0, 0, 0, 0)
+            Foreground = (Brush)Application.Current.FindResource("TextMutedBrush"),
         };
     }
 
@@ -2217,8 +3064,6 @@ statusCard.Child = statusContent;
         SetPrimaryNav("Settings");
         UpdateStatusBar();
 
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 0, 16, 48) };
-        
         var root = new StackPanel { Margin = new Thickness(0, 0, 0, 0) };
 
         root.Children.Add(CreatePageHeader("Settings", "Customize your Joseph experience."));
@@ -2231,9 +3076,11 @@ statusCard.Child = statusContent;
 
         RefreshSettingsContent(_settingsContentHost);
 
-        scroll.Content = root;
-        _settingsScroll = scroll;
-        CrossFade(scroll);
+        // Settings page content is placed directly in ContentScroll (the outer ScrollViewer),
+        // so scroll operations should target that instead of a nested ScrollViewer.
+        _settingsScroll = ContentScroll;
+        _settingsInitialEntry = true;
+        CrossFade(root);
     }
 
     private void ShowMarketView()
@@ -2259,8 +3106,6 @@ statusCard.Child = statusContent;
             }
         }
 
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 0, 16, 48) };
-        
         var root = new StackPanel { Margin = new Thickness(0, 0, 0, 0) };
 
         root.Children.Add(CreatePageHeader("Market", "Real NADD/SOL token data from GeckoTerminal and celebration activity stats."));
@@ -2293,9 +3138,7 @@ statusCard.Child = statusContent;
                 Text = $"24h Change: {nadd.Change24hPercent:+0.00;-0.00;0.00}%",
                 FontSize = 11,
                 Margin = new Thickness(0, 4, 0, 0),
-                Foreground = nadd.Change24hPercent >= 0
-                    ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A))
-                    : new SolidColorBrush(Color.FromRgb(0xD9, 0x6C, 0x79))
+                Foreground = nadd.Change24hPercent >= 0 ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("DangerBrush")
             });
 
             marketInfo.Children.Add(new TextBlock
@@ -2377,6 +3220,7 @@ statusCard.Child = statusContent;
             {
                 Content = r,
                 FontSize = 10.5,
+                Style = (Style)FindResource("GhostButton"),
                 Padding = new Thickness(10, 4, 10, 4),
                 Margin = new Thickness(0, 0, 6, 0)
             };
@@ -2402,8 +3246,25 @@ statusCard.Child = statusContent;
             Margin = new Thickness(0, 0, 0, 8)
         });
 
-        var activityCard = CreateCard(16);
         var stats = Services.Library!.GetStats();
+
+        // Stats tiles
+        var statsPanel = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+        var statTileSize = new Size(140, 64);
+
+        if (stats.MostCelebratedJoseph is not null)
+        {
+            statsPanel.Children.Add(CreateStatTile("⭐ Top Joseph", stats.MostCelebratedJoseph, statTileSize));
+        }
+        statsPanel.Children.Add(CreateStatTile("Total", stats.TotalCelebrations.ToString("N0"), statTileSize));
+        statsPanel.Children.Add(CreateStatTile("Today", stats.CelebrationsToday.ToString("N0"), statTileSize));
+        if (stats.LastCelebration.HasValue)
+        {
+            statsPanel.Children.Add(CreateStatTile("🕒 Last", stats.LastCelebration.Value.ToString("HH:mm"), statTileSize));
+        }
+        root.Children.Add(statsPanel);
+
+        var activityCard = CreateCard(16);
         activityCard.Child = BuildActivityChart(stats, HistoryRange.Hours24);
         root.Children.Add(activityCard);
 
@@ -2431,6 +3292,7 @@ statusCard.Child = statusContent;
             {
                 Content = label,
                 FontSize = 10.5,
+                Style = (Style)FindResource("GhostButton"),
                 Padding = new Thickness(10, 4, 10, 4),
                 Margin = new Thickness(0, 0, 6, 0)
             };
@@ -2442,8 +3304,7 @@ statusCard.Child = statusContent;
         }
         root.Children.Add(actRangeBar);
 
-        scroll.Content = root;
-        CrossFade(scroll);
+        CrossFade(root);
     }
 
     private void RenderMarketChartFromCurrent()
@@ -2490,9 +3351,9 @@ statusCard.Child = statusContent;
 
         var info = new TextBlock
         {
-            Text = $"Total celebrations: {stats.TotalCelebrations:N0}",
+            Text = $"📊 {stats.TotalCelebrations:N0} total celebrations across {stats.ImageCount:N0} images",
             FontSize = 10.5,
-            Foreground = (Brush)FindResource("TextMutedBrush"),
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
             Margin = new Thickness(12, 0, 12, 12)
         };
 
@@ -2536,15 +3397,30 @@ statusCard.Child = statusContent;
 
     private void RefreshSettingsPage()
     {
+        var savedOffset = _settingsScroll?.VerticalOffset;
         if (_settingsContentHost is not null)
             RefreshSettingsContent(_settingsContentHost);
-        _settingsScroll?.ScrollToTop();
+        // Preserve scroll position when switching sub-pages — the nav bar stays fixed.
+        // Only scroll to top on initial entry to the Settings page.
+        if (_settingsInitialEntry)
+        {
+            _settingsInitialEntry = false;
+            _settingsScroll?.ScrollToTop();
+        }
+        else if (savedOffset.HasValue && _settingsScroll is not null)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (savedOffset <= _settingsScroll!.ScrollableHeight)
+                    _settingsScroll.ScrollToVerticalOffset(savedOffset.Value);
+            }));
+        }
     }
 
     private FrameworkElement CreateSettingsNavBar()
     {
         var items = new[] { "General", "Overlay", "Text", "Animations", "Sounds", "Hotkeys", "Updates", "Advanced" };
-        var wrap = new WrapPanel { Margin = new Thickness(16), IsItemsHost = true };
+        var wrap = new WrapPanel { Margin = new Thickness(16) };
 
         foreach (var item in items)
         {
@@ -3068,7 +3944,7 @@ private StackPanel BuildSettingsSounds()
         {
             _settingsSubPage = "Sounds";
             ShowSettingsView();
-            SetStatus("AUDIO ADDED", new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)));
+            SetStatus("AUDIO ADDED", (Brush)FindResource("SuccessBrush"));
         }
         else if (result.SkippedDuplicate)
         {
@@ -3112,7 +3988,7 @@ private StackPanel BuildSettingsSounds()
             {
                 Text = "   (file missing — will be skipped safely)",
                 FontSize = 10.5,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xD9, 0x6C, 0x79)),
+                Foreground = (Brush)FindResource("DangerBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             });
         }
@@ -3524,8 +4400,10 @@ private StackPanel BuildSettingsSounds()
         var isConfigured = supabase != null && supabase.Config.IsConfigured;
         // Status dot + line
         var statusRow = new Grid { Margin = new Thickness(0, 4, 0, 4) };
-                statusRow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                statusRow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        statusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        statusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        statusRow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        statusRow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         // Dot
         Brush dotBrush;
         if (supabase != null && supabase.IsConnected)
@@ -3534,7 +4412,7 @@ private StackPanel BuildSettingsSounds()
         }
         else if (supabase != null && supabase.State == SupabaseState.Syncing)
         {
-            dotBrush = new SolidColorBrush(Color.FromRgb(0x72, 0x81, 0xFF));
+            dotBrush = (Brush)FindResource("AccentBrush");
         }
         else if (supabase != null && (supabase.State == SupabaseState.Offline || supabase.State == SupabaseState.Error))
         {
@@ -3542,7 +4420,7 @@ private StackPanel BuildSettingsSounds()
         }
         else
         {
-            dotBrush = (Brush)FindResource("MutedBrush");
+            dotBrush = (Brush)FindResource("TextMutedBrush");
         }
         var dot = new Ellipse { Width = 12, Height = 12, Fill = dotBrush, Margin = new Thickness(0, 0, 8, 0) };
         // Status text
@@ -3554,9 +4432,6 @@ private StackPanel BuildSettingsSounds()
             Foreground = isConfigured ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center
         };
-        // Sync now button
-        var syncNow = new Button { Content = "Sync Now", Style = (Style)FindResource("PrimaryButton"), Height = 32, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 0) };
-        syncNow.Click += async (_, _) => await _app.SyncNowAsync(() => ShowSettingsView());
         // Info line
         var infoLine = new TextBlock
         {
@@ -3567,14 +4442,38 @@ private StackPanel BuildSettingsSounds()
             Margin = new Thickness(0, 8, 0, 0)
         };
         // Assemble
-        var leftPanel = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center };
+        var leftPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         leftPanel.Children.Add(dot);
         leftPanel.Children.Add(statusText);
-        var rightPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-        rightPanel.Children.Add(syncNow);
-        rightPanel.Children.Add(infoLine);
+        Grid.SetColumn(leftPanel, 0);
+        Grid.SetRow(leftPanel, 0);
         statusRow.Children.Add(leftPanel);
-        statusRow.Children.Add(rightPanel);
+
+        var syncNowBtn = new Button { Content = "Sync Now", Style = (Style)FindResource("PrimaryButton"), Height = 32, Margin = new Thickness(0, 4, 0, 0) };
+        syncNowBtn.Click += async (_, _) => await _app.SyncNowAsync(() => ShowSettingsView());
+        Grid.SetColumn(syncNowBtn, 0);
+        Grid.SetRow(syncNowBtn, 1);
+        statusRow.Children.Add(syncNowBtn);
+
+        Grid.SetColumn(infoLine, 1);
+        Grid.SetRow(infoLine, 0);
+        statusRow.Children.Add(infoLine);
+
+        // Add a small sync status below
+        if (supabase is not null && supabase.LastSyncUtc.HasValue)
+        {
+            var syncStatus = new TextBlock
+            {
+                Text = $"Last synced: {supabase.LastSyncUtc.Value:HH:mm:ss}",
+                FontSize = 10,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            Grid.SetColumn(syncStatus, 1);
+            Grid.SetRow(syncStatus, 1);
+            statusRow.Children.Add(syncStatus);
+        }
+
         panel.Children.Add(statusRow);
 
         panel.Children.Add(CreateEnumComboRow("Sync frequency", settings.SyncFrequency, v =>
@@ -3629,7 +4528,7 @@ private StackPanel BuildSettingsSounds()
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppPaths.RootDir) { UseShellExecute = true });
             }
-            catch { }
+            catch (Exception ex) { AppLog.Warn($"Failed to open data folder: {ex.Message}"); }
         };
         panel.Children.Add(openDataBtn);
 
@@ -3665,7 +4564,7 @@ private StackPanel BuildSettingsSounds()
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
                     "https://www.doordash.com/store/dunya-fresh-halal-food-orange-park-713826/1005271/") { UseShellExecute = true });
             }
-            catch { };
+            catch (Exception ex) { AppLog.Warn($"Failed to open DoorDash URL: {ex.Message}"); };
         };
         panel.Children.Add(hungryBtn);
 
@@ -3682,7 +4581,7 @@ private StackPanel BuildSettingsSounds()
     }
 
     private FrameworkElement CreateSectionHeader(string text)
-{
+    {
     var stack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 6) };
     var indicator = new Rectangle
     {
@@ -3699,10 +4598,10 @@ private StackPanel BuildSettingsSounds()
         Foreground = (Brush)FindResource("TextPrimaryBrush"),
         VerticalAlignment = VerticalAlignment.Center
     };
-    stack.Children.Add(indicator);
-    stack.Children.Add(label);
-    return stack;
-}
+        stack.Children.Add(indicator);
+        stack.Children.Add(label);
+        return stack;
+    }
 
     private FrameworkElement CreateInfoRow(string text, double fontSize = 11.5)
     {
@@ -3723,10 +4622,10 @@ private StackPanel BuildSettingsSounds()
         var successSoft = (Brush)FindResource("SuccessSoftBrush");
         var accent = (Brush)FindResource("AccentBrush");
         var accentSoft = (Brush)FindResource("AccentSoftBrush");
-        var danger = new SolidColorBrush(Color.FromRgb(0xE0, 0x7A, 0x86));
-        var dangerSoft = new SolidColorBrush(Color.FromRgb(0x3A, 0x1E, 0x24));
-        var warn = new SolidColorBrush(Color.FromRgb(0xD8, 0xAE, 0x63));
-        var warnSoft = new SolidColorBrush(Color.FromRgb(0x33, 0x28, 0x17));
+        var danger = (Brush)FindResource("DangerBrush");
+        var dangerSoft = (Brush)FindResource("DangerSoftBrush");
+        var warn = (Brush)FindResource("WarningBrush");
+        var warnSoft = (Brush)FindResource("WarningSoftBrush");
 
         // Map the canonical phase to one of three UI states.
         bool connected = phase is CounterStrikeConnectionPhase.ReceivingGameState;
@@ -3753,16 +4652,16 @@ private StackPanel BuildSettingsSounds()
             Background = bg,
             BorderBrush = fg,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(12, 4, 12, 4),
+            CornerRadius = new CornerRadius(13),
+            Padding = new Thickness(13, 5, 13, 5),
             HorizontalAlignment = HorizontalAlignment.Left,
             MaxWidth = 430,
-            MinHeight = 26,
+            MinHeight = 28,
             Margin = new Thickness(12, 0, 12, 10),
             Child = new TextBlock
             {
                 Text = text,
-                FontSize = 11.5,
+                FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = fg
@@ -3774,13 +4673,110 @@ private StackPanel BuildSettingsSounds()
     {
         var card = new Border
         {
-            Background = (Brush)FindResource("ElevatedBrush"),
+            Background = (Brush)FindResource("CardGradientBrush"),
             BorderBrush = (Brush)FindResource("BorderBrush"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Margin = new Thickness(0, 0, 0, 12)
+            CornerRadius = new CornerRadius(12),
+            Margin = new Thickness(0, 0, 0, 12),
+            // Clone so per-card shadow animations don't affect every card sharing the resource.
+            Effect = ((Effect)FindResource("CardShadowEffect")).Clone(),
+            RenderTransform = new TranslateTransform()
+        };
+        // Animated hover lift: card rises 2px and its shadow deepens — quiet
+        // affordance that the card is alive. Reverses smoothly on leave.
+        var lift = (TranslateTransform)card.RenderTransform;
+        card.MouseEnter += (_, _) =>
+        {
+            card.BorderBrush = (Brush)FindResource("HoverBorderBrush");
+            var up = new DoubleAnimation(0, -2, TimeSpan.FromMilliseconds(150))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            lift.BeginAnimation(TranslateTransform.YProperty, up);
+            if (card.Effect is DropShadowEffect shadow)
+            {
+                var deepen = new DoubleAnimation(shadow.Opacity, Math.Min(1.0, shadow.Opacity + 0.1),
+                    TimeSpan.FromMilliseconds(150));
+                shadow.BeginAnimation(DropShadowEffect.OpacityProperty, deepen);
+            }
+        };
+        card.MouseLeave += (_, _) =>
+        {
+            card.BorderBrush = (Brush)FindResource("BorderBrush");
+            var down = new DoubleAnimation(lift.Y, 0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            lift.BeginAnimation(TranslateTransform.YProperty, down);
+            if (card.Effect is DropShadowEffect shadow)
+            {
+                var fade = new DoubleAnimation(shadow.Opacity, 0.35, TimeSpan.FromMilliseconds(200));
+                shadow.BeginAnimation(DropShadowEffect.OpacityProperty, fade);
+            }
         };
         return card;
+    }
+
+    private Border CreateStatTile(string label, string value, Size size)
+    {
+        var bgBrush = (Brush)FindResource("SecondarySurfaceBrush");
+        var borderBrush = (Brush)FindResource("BorderBrush");
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
+
+        var valueBlock = new TextBlock
+        {
+            Text = value,
+            FontSize = 18,
+            FontWeight = FontWeights.Bold,
+            Foreground = (Brush)FindResource("AccentBrush"),
+            TextAlignment = System.Windows.TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        Grid.SetRow(valueBlock, 0);
+        grid.Children.Add(valueBlock);
+
+        var labelBlock = new TextBlock
+        {
+            Text = label,
+            FontSize = 9.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            TextAlignment = System.Windows.TextAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4)
+        };
+        Grid.SetRow(labelBlock, 1);
+        grid.Children.Add(labelBlock);
+
+        var tile = new Border
+        {
+            Width = size.Width,
+            Height = size.Height,
+            CornerRadius = new CornerRadius(10),
+            Background = (Brush)FindResource("ElevatedBrush"),
+            BorderBrush = borderBrush,
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, 0, 12, 8),
+            Child = grid,
+            Effect = (Effect)FindResource("CardShadowEffect")
+        };
+
+        // Hover animation
+        tile.MouseEnter += (_, _) =>
+        {
+            tile.Background = (Brush)FindResource("HoverBrush");
+            tile.BorderBrush = (Brush)FindResource("HoverBorderBrush");
+        };
+        tile.MouseLeave += (_, _) =>
+        {
+            tile.Background = bgBrush;
+            tile.BorderBrush = borderBrush;
+        };
+
+        return tile;
     }
 
     private FrameworkElement CreatePositionPicker(AppSettings settings, Action<ImagePosition> onChange)
@@ -3874,113 +4870,112 @@ private StackPanel BuildSettingsSounds()
         return btn;
     }
 
-private FrameworkElement CreatePresetGrid(AppSettings settings)
-{
-    var outer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 4, 0, 4) };
-
-    var grid = new UniformGrid
+    private FrameworkElement CreatePresetGrid(AppSettings settings)
     {
-        Columns = 2,
-        HorizontalAlignment = HorizontalAlignment.Stretch
-    };
+        var outer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 4, 0, 4) };
 
-    var presets = new[]
-    {
-        (Models.CelebrationPreset.ClassicJoseph,      "Classic Joseph",      "Pop + Fade\nNormal",          Colors.White),
-        (Models.CelebrationPreset.ITWizard,            "IT Wizard",           "Scale In + Impact\nStrong",    Colors.Cyan),
-        (Models.CelebrationPreset.ShawarmaMode,        "Shawarma Mode",       "Bounce + Bounce\nStrong",      Colors.Orange),
-        (Models.CelebrationPreset.CivicDeployment,     "Civic Deployment",    "Slide Right + Stamp\nStrong",  Colors.Red),
-        (Models.CelebrationPreset.MassageChairRecovery,"Massage Chair",       "Fade + Fade\nSubtle",          Colors.LightGreen),
-        (Models.CelebrationPreset.PrinterBossFight,    "Printer Boss Fight",  "Shake + Impact\nUnhinged",     Colors.DarkRed),
-        (Models.CelebrationPreset.MaximumNaddaf,       "Maximum Naddaf",      "Jumpscare + Stamp\nUnhinged",  Colors.Magenta),
-        (Models.CelebrationPreset.CompletelyRandom,    "Completely Random",   "Random + Random\nNormal",      Colors.LightYellow)
-    };
-
-    foreach (var (preset, label, desc, accent) in presets)
-    {
-        var isActive = settings.Preset == preset;
-        var card = new Border
+        var grid = new UniformGrid
         {
-            Tag = preset,
-            Margin = new Thickness(3),
-            Padding = new Thickness(10, 8, 10, 8),
-            CornerRadius = new CornerRadius(8),
-            BorderBrush = isActive ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)) : new SolidColorBrush(Color.FromRgb(0x3A, 0x3F, 0x4B)),
-            BorderThickness = new Thickness(isActive ? 2 : 1),
-            Background = isActive ? new SolidColorBrush(Color.FromRgb(0x1E, 0x2A, 0x24)) : new SolidColorBrush(Color.FromRgb(0x25, 0x29, 0x32))
+            Columns = 2,
+            HorizontalAlignment = HorizontalAlignment.Stretch
         };
 
-        var stack = new StackPanel { Orientation = Orientation.Vertical };
-        var title = new TextBlock
+        var presets = new[]
         {
-            Text = label,
-            FontSize = 12,
-            FontWeight = isActive ? FontWeights.Bold : FontWeights.SemiBold,
-            Foreground = isActive ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)) : new SolidColorBrush(Colors.White),
-            Margin = new Thickness(0, 0, 0, 3)
+            (Models.CelebrationPreset.ClassicJoseph,      "Classic Joseph",      "Pop + Fade\nNormal",          Colors.White),
+            (Models.CelebrationPreset.ITWizard,            "IT Wizard",           "Scale In + Impact\nStrong",    Colors.Cyan),
+            (Models.CelebrationPreset.ShawarmaMode,        "Shawarma Mode",       "Bounce + Bounce\nStrong",      Colors.Orange),
+            (Models.CelebrationPreset.CivicDeployment,     "Civic Deployment",    "Slide Right + Stamp\nStrong",  Colors.Red),
+            (Models.CelebrationPreset.MassageChairRecovery,"Massage Chair",       "Fade + Fade\nSubtle",          Colors.LightGreen),
+            (Models.CelebrationPreset.PrinterBossFight,    "Printer Boss Fight",  "Shake + Impact\nUnhinged",     Colors.DarkRed),
+            (Models.CelebrationPreset.MaximumNaddaf,       "Maximum Naddaf",      "Jumpscare + Stamp\nUnhinged",  Colors.Magenta),
+            (Models.CelebrationPreset.CompletelyRandom,    "Completely Random",   "Random + Random\nNormal",      Colors.LightYellow)
         };
-        var detail = new TextBlock
+
+        foreach (var (preset, label, desc, accent) in presets)
         {
-            Text = desc,
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)),
+            var isActive = settings.Preset == preset;
+            var card = new Border
+            {
+                Tag = preset,
+                Margin = new Thickness(3),
+                Padding = new Thickness(10, 8, 10, 8),
+                CornerRadius = new CornerRadius(8),
+                BorderBrush = isActive ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("BorderSoftBrush"),
+                Background = isActive ? (Brush)FindResource("SuccessSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush")
+            };
+
+            var stack = new StackPanel { Orientation = Orientation.Vertical };
+            var title = new TextBlock
+            {
+                Text = label,
+                FontSize = 12,
+                FontWeight = isActive ? FontWeights.Bold : FontWeights.SemiBold,
+                Foreground = isActive ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextPrimaryBrush"),
+                Margin = new Thickness(0, 0, 0, 3)
+            };
+            var detail = new TextBlock
+            {
+                Text = desc,
+                FontSize = 10,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                TextWrapping = TextWrapping.Wrap
+            };
+            stack.Children.Add(title);
+            stack.Children.Add(detail);
+            card.Child = stack;
+
+            card.MouseLeftButtonDown += (_, _) =>
+            {
+                settings.Preset = preset;
+                Services.Settings.Save();
+                RefreshSettingsPage();
+            };
+
+            grid.Children.Add(card);
+        }
+
+        outer.Children.Add(grid);
+
+        var note = new TextBlock
+        {
+            Text = "Tip: use Completely Random for maximum chaos, or pick a preset and tweak FX Intensity below.",
+            FontSize = 10.5,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            Margin = new Thickness(4, 8, 4, 0),
             TextWrapping = TextWrapping.Wrap
         };
-        stack.Children.Add(title);
-        stack.Children.Add(detail);
-        card.Child = stack;
+        outer.Children.Add(note);
 
-        card.MouseLeftButtonDown += (_, _) =>
+        // FX Intensity selector (works with any preset)
+        var intensityRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 10, 4, 0) };
+        var intensityLabel = new TextBlock
         {
-            settings.Preset = preset;
-            Services.Settings.Save();
-            RefreshSettingsPage();
+            Text = "Intensity:",
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
         };
+        intensityRow.Children.Add(intensityLabel);
 
-        grid.Children.Add(card);
-    }
-
-    outer.Children.Add(grid);
-
-    var note = new TextBlock
-    {
-        Text = "Tip: use Completely Random for maximum chaos, or pick a preset and tweak FX Intensity below.",
-        FontSize = 10.5,
-        Foreground = new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)),
-        Margin = new Thickness(4, 8, 4, 0),
-        TextWrapping = TextWrapping.Wrap
-    };
-    outer.Children.Add(note);
-
-    // FX Intensity selector (works with any preset)
-    var intensityRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 10, 4, 0) };
-    var intensityLabel = new TextBlock
-    {
-        Text = "Intensity:",
-        FontSize = 11,
-        FontWeight = FontWeights.SemiBold,
-        Foreground = (Brush)new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)),
-        VerticalAlignment = VerticalAlignment.Center,
-        Margin = new Thickness(0, 0, 8, 0)
-    };
-    intensityRow.Children.Add(intensityLabel);
-
-    var intensityOptions = new[] { "Subtle", "Normal", "Strong", "Unhinged" };
-    var currentIntensity = settings.FxIntensity.ToString();
-    foreach (var opt in intensityOptions)
-    {
-        var isActive = settings.FxIntensity.ToString() == opt;
-        var btn = new System.Windows.Controls.Button
+        var intensityOptions = new[] { "Subtle", "Normal", "Strong", "Unhinged" };
+        var currentIntensity = settings.FxIntensity.ToString();
+        foreach (var opt in intensityOptions)
         {
-            Content = opt,
-            FontSize = 10.5,
-            FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
-            Padding = new Thickness(10, 5, 10, 5),
-            Margin = new Thickness(2, 0, 2, 0),
-            BorderThickness = new Thickness(isActive ? 2 : 1),
-            BorderBrush = isActive ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)) : new SolidColorBrush(Color.FromRgb(0x3A, 0x3F, 0x4B)),
-            Background = isActive ? new SolidColorBrush(Color.FromRgb(0x1E, 0x2A, 0x24)) : new SolidColorBrush(Color.FromRgb(0x25, 0x29, 0x32)),
-            Foreground = isActive ? new SolidColorBrush(Color.FromRgb(0x5F, 0xB9, 0x8A)) : new SolidColorBrush(Colors.White),
+            var isActive = settings.FxIntensity.ToString() == opt;
+            var btn = new System.Windows.Controls.Button
+            {
+                Content = opt,
+                FontSize = 10.5,
+                FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
+                Padding = new Thickness(10, 5, 10, 5),
+                Margin = new Thickness(2, 0, 2, 0),
+                BorderThickness = new Thickness(isActive ? 2 : 1),
+                BorderBrush = isActive ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("BorderSoftBrush"),
+                Background = isActive ? (Brush)FindResource("SuccessSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush"),
+                Foreground = isActive ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextPrimaryBrush"),
             Cursor = System.Windows.Input.Cursors.Hand
         };
         btn.Click += (_, _) =>
@@ -4016,10 +5011,10 @@ private FrameworkElement CreatePresetGrid(AppSettings settings)
             Services.Settings.Save();
         }
     }));
-    outer.Children.Add(textRow);
+        outer.Children.Add(textRow);
 
-    return outer;
-}
+        return outer;
+    }
 
     private FrameworkElement CreateComboRow(string label, IEnumerable<string> items, string selected, Action<string> onChange, int labelWidth = 140)
     {
@@ -4139,7 +5134,7 @@ private FrameworkElement CreatePresetGrid(AppSettings settings)
         var tb = new TextBlock
         {
             Text = text,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x92, 0x97, 0xA1)),
+                Foreground = (Brush)Application.Current.FindResource("TextMutedBrush"),
             FontSize = 12.5,
             TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.None,
@@ -4561,7 +5556,7 @@ private FrameworkElement CreatePresetGrid(AppSettings settings)
                         UseShellExecute = true
                     });
                 }
-                catch { }
+            catch (Exception ex) { AppLog.Warn($"Failed to open releases page: {ex.Message}"); }
             };
             buttonRow.Children.Add(viewOnlineBtn);
 

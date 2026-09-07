@@ -411,6 +411,18 @@ public class AppSettings
 
     public bool DebugOverlayBounds { get; set; }
 
+     // ---- HL2 game log position ----
+    /// <summary>Last line index read from hl2.log (incremental monitoring).</summary>
+    public long Hl2LogFilePosition { get; set; } = 0;
+    /// <summary>Last line index read from condebug console.log (incremental monitoring).</summary>
+    public long Hl2CondebugLogFilePosition { get; set; } = 0;
+    /// <summary>True once the user has been instructed to add -condebug to HL2 launch options.</summary>
+    public bool Hl2CondebugApplied { get; set; } = false;
+
+    // ---- MW2 game log position ----
+    /// <summary>Last line index read from iw5.log (incremental monitoring).</summary>
+    public long Mw2LogFilePosition { get; set; } = 0;
+
     // ---- CS:GO / CS2 game-state integration ----
     /// <summary>Enable automatic celebrations from CS:GO / CS2 GSI events.</summary>
     public bool GameIntegrationEnabled { get; set; }
@@ -467,6 +479,10 @@ public class AppSettings
     /// </summary>
     public Dictionary<string, GameEventCelebrationConfig> GameEventConfigs { get; set; } =
         new(StringComparer.Ordinal);
+
+    // ---- Games page: which game is currently selected for status display ----
+    /// <summary>Which game's status is shown on the Games page. Persisted so the toggle sticks.</summary>
+    public string SelectedGame { get; set; } = "cs2";
 
     public AppSettings Clone()
     {

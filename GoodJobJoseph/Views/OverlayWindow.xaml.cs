@@ -49,115 +49,127 @@ public partial class OverlayWindow : Window
         _animationRunning = false;
         StopHoldTimer();
 
-        var imageOpacity = Math.Clamp(settings.ImageOpacity, 0.0, 1.0);
-        var scale = Math.Clamp(settings.OverlayScale, 0.25, 3.0);
-
-        JosephImage.RenderTransform = null;
-        JosephImage.Opacity = 0;
-
-        if (imageSource is not null)
+        try
         {
-            if (settings.TrimTransparentBounds)
-                imageSource = TrimTransparentBounds(imageSource, cacheKey);
+            var imageOpacity = Math.Clamp(settings.ImageOpacity, 0.0, 1.0);
+            var scale = Math.Clamp(settings.OverlayScale, 0.25, 3.0);
 
-            JosephImage.Source = imageSource;
-            JosephImage.Visibility = Visibility.Visible;
-            JosephPanel.Visibility = Visibility.Visible;
+            JosephImage.RenderTransform = null;
+            JosephImage.Opacity = 0;
+
+            if (imageSource is not null)
+            {
+                if (settings.TrimTransparentBounds)
+                    imageSource = TrimTransparentBounds(imageSource, cacheKey);
+
+                JosephImage.Source = imageSource;
+                JosephImage.Visibility = Visibility.Visible;
+                JosephPanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                var cb = _onCompleted;
+                _onCompleted = null;
+                cb?.Invoke();
+                return;
+            }
+
+            ApplySizeAndPosition(settings, imageSource, scale, placement);
+
+            var effectiveTextMode = resolved?.TextMode ?? settings.TextMode;
+            var effectiveQuote = quoteText ?? resolved?.ResolvedQuote ?? settings.CelebrationText;
+            var showText = settings.ShowCelebrationText
+                           && effectiveTextMode != TextMode.NoText
+                           && !string.IsNullOrWhiteSpace(effectiveQuote)
+                           && settings.TextPosition != TextPosition.Hidden;
+
+            if (showText)
+            {
+                CelebrationTextBlock.Text = NormalizeQuoteText(effectiveQuote);
+                CelebrationTextBlock.FontSize = ResolveFontSize(settings.TextFontSizePreset, settings.TextFontSize);
+                CelebrationTextBlock.Opacity = Math.Clamp(settings.TextOpacity, 0.40, 1.0);
+                CelebrationTextBlock.Foreground = new SolidColorBrush(settings.TextColor);
+                CelebrationTextBlock.FontWeight = settings.TextWeight switch
+                {
+                    Models.TextWeight.Normal => FontWeights.Normal,
+                    Models.TextWeight.SemiBold => FontWeights.SemiBold,
+                    Models.TextWeight.Bold => FontWeights.Bold,
+                    Models.TextWeight.ExtraBold => FontWeights.Black,
+                    _ => FontWeights.Bold
+                };
+                // One-line layout: text must NOT wrap. Font shrinks to fit instead (auto-fit below).
+                CelebrationTextBlock.TextWrapping = TextWrapping.NoWrap;
+                CelebrationTextBlock.TextAlignment = System.Windows.TextAlignment.Center;
+                CelebrationTextBlock.HorizontalAlignment = HorizontalAlignment.Center;
+                CelebrationTextBlock.VerticalAlignment = VerticalAlignment.Center;
+                // Constrain to 90% of the overlay viewport (5% safe margin each side).
+                var maxTextWidth = Math.Max(200, ActualWidth * 0.9);
+                CelebrationTextBlock.MaxWidth = settings.TextMaxWidth > 0 ? Math.Min(settings.TextMaxWidth, maxTextWidth) : maxTextWidth;
+                // Auto-fit: shrink font until the full quote fits on one line, with a floor.
+                AutoFitFontSize(settings, CelebrationTextBlock);
+                CelebrationTextBlock.Effect = BuildTextEffect(settings);
+                ApplyTextPosition(settings);
+                CelebrationTextBlock.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                CelebrationTextBlock.Visibility = Visibility.Collapsed;
+            }
+
+            Opacity = 1.0;
+
+            var anim = resolved?.ImageAnimation ?? ResolveAnimation(settings);
+            var duration = Math.Max(400, settings.OverlayDurationMs);
+            var resolvedDuration = resolved?.DurationMs ?? duration;
+            var speedMul = settings.EntrySpeed switch
+            {
+                EntrySpeed.Slow => 1.6,
+                EntrySpeed.Normal => 1.0,
+                EntrySpeed.Fast => 0.6,
+                EntrySpeed.Instant => 0.1,
+                _ => 1.0
+            };
+            var entryMs = settings.EntryDurationMs > 0 ? settings.EntryDurationMs : (int)(Math.Max(80, resolvedDuration / 5) * speedMul);
+            var exitMs = settings.ExitDurationMs > 0 ? settings.ExitDurationMs : Math.Max(80, resolvedDuration / 4);
+
+            if (entryMs + exitMs > resolvedDuration)
+            {
+                var cut = (int)Math.Ceiling((entryMs + exitMs - resolvedDuration) / 2.0);
+                entryMs = Math.Max(0, entryMs - cut);
+                exitMs = Math.Max(0, exitMs - cut);
+            }
+
+            LogResolved(settings, anim, resolvedDuration, entryMs, exitMs);
+
+            _entryStyle = anim;
+            _easingStyle = settings.EasingStyle;
+            RunAnimation(anim, resolvedDuration, entryMs, exitMs, imageOpacity, scale, settings.EasingStyle, settings.ExitStyle);
+
+            if (showText && resolved is not null)
+            {
+                var delay = (int)(resolved.TextDelayMs > 0 ? resolved.TextDelayMs : entryMs * 0.6);
+                var textFx = resolved.TextFx;
+                var txtScale = resolved.TextScale;
+                var intensity = resolved.Intensity;
+                var remaining = resolvedDuration - delay;
+                if (remaining <= 0) remaining = exitMs > 0 ? exitMs : 400;
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delay) };
+                timer.Tick += (_, _) =>
+                {
+                    timer.Stop();
+                    ApplyTextFx(textFx, intensity, remaining, txtScale);
+                };
+                timer.Start();
+            }
         }
-        else
+        catch (Exception ex)
         {
+            AppLog.Error("OverlayWindow.ShowOverlay failed — aborting animation.", ex);
+            _animationRunning = false;
+            StopHoldTimer();
             var cb = _onCompleted;
             _onCompleted = null;
             cb?.Invoke();
-            return;
-        }
-
-        ApplySizeAndPosition(settings, imageSource, scale, placement);
-
-        var effectiveTextMode = resolved?.TextMode ?? settings.TextMode;
-        var effectiveQuote = quoteText ?? resolved?.ResolvedQuote ?? settings.CelebrationText;
-        var showText = settings.ShowCelebrationText
-                       && effectiveTextMode != TextMode.NoText
-                       && !string.IsNullOrWhiteSpace(effectiveQuote)
-                       && settings.TextPosition != TextPosition.Hidden;
-
-        if (showText)
-        {
-            CelebrationTextBlock.Text = NormalizeQuoteText(effectiveQuote);
-            CelebrationTextBlock.FontSize = ResolveFontSize(settings.TextFontSizePreset, settings.TextFontSize);
-            CelebrationTextBlock.Opacity = Math.Clamp(settings.TextOpacity, 0.40, 1.0);
-            CelebrationTextBlock.Foreground = new SolidColorBrush(settings.TextColor);
-            CelebrationTextBlock.FontWeight = settings.TextWeight switch
-            {
-                Models.TextWeight.Normal => FontWeights.Normal,
-                Models.TextWeight.SemiBold => FontWeights.SemiBold,
-                Models.TextWeight.Bold => FontWeights.Bold,
-                Models.TextWeight.ExtraBold => FontWeights.Black,
-                _ => FontWeights.Bold
-            };
-            // One-line layout: text must NOT wrap. Font shrinks to fit instead (auto-fit below).
-            CelebrationTextBlock.TextWrapping = TextWrapping.NoWrap;
-            CelebrationTextBlock.TextAlignment = System.Windows.TextAlignment.Center;
-            CelebrationTextBlock.HorizontalAlignment = HorizontalAlignment.Center;
-            CelebrationTextBlock.VerticalAlignment = VerticalAlignment.Center;
-            // Constrain to 90% of the overlay viewport (5% safe margin each side).
-            var maxTextWidth = Math.Max(200, ActualWidth * 0.9);
-            CelebrationTextBlock.MaxWidth = settings.TextMaxWidth > 0 ? Math.Min(settings.TextMaxWidth, maxTextWidth) : maxTextWidth;
-            // Auto-fit: shrink font until the full quote fits on one line, with a floor.
-            AutoFitFontSize(settings, CelebrationTextBlock);
-            CelebrationTextBlock.Effect = BuildTextEffect(settings);
-            ApplyTextPosition(settings);
-            CelebrationTextBlock.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            CelebrationTextBlock.Visibility = Visibility.Collapsed;
-        }
-
-        Opacity = 1.0;
-
-        var anim = resolved?.ImageAnimation ?? ResolveAnimation(settings);
-        var duration = Math.Max(400, settings.OverlayDurationMs);
-        var resolvedDuration = resolved?.DurationMs ?? duration;
-        var speedMul = settings.EntrySpeed switch
-        {
-            EntrySpeed.Slow => 1.6,
-            EntrySpeed.Normal => 1.0,
-            EntrySpeed.Fast => 0.6,
-            EntrySpeed.Instant => 0.1,
-            _ => 1.0
-        };
-        var entryMs = settings.EntryDurationMs > 0 ? settings.EntryDurationMs : (int)(Math.Max(80, resolvedDuration / 5) * speedMul);
-        var exitMs = settings.ExitDurationMs > 0 ? settings.ExitDurationMs : Math.Max(80, resolvedDuration / 4);
-
-        if (entryMs + exitMs > resolvedDuration)
-        {
-            var cut = (int)Math.Ceiling((entryMs + exitMs - resolvedDuration) / 2.0);
-            entryMs = Math.Max(0, entryMs - cut);
-            exitMs = Math.Max(0, exitMs - cut);
-        }
-
-        LogResolved(settings, anim, resolvedDuration, entryMs, exitMs);
-
-        _entryStyle = anim;
-        _easingStyle = settings.EasingStyle;
-        RunAnimation(anim, resolvedDuration, entryMs, exitMs, imageOpacity, scale, settings.EasingStyle, settings.ExitStyle);
-
-        if (showText && resolved is not null)
-        {
-            var delay = (int)(resolved.TextDelayMs > 0 ? resolved.TextDelayMs : entryMs * 0.6);
-            var textFx = resolved.TextFx;
-            var txtScale = resolved.TextScale;
-            var intensity = resolved.Intensity;
-            var remaining = resolvedDuration - delay;
-            if (remaining <= 0) remaining = exitMs > 0 ? exitMs : 400;
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delay) };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                ApplyTextFx(textFx, intensity, remaining, txtScale);
-            };
-            timer.Start();
         }
     }
 
@@ -342,7 +354,7 @@ public partial class OverlayWindow : Window
 
     private BitmapSource TrimTransparentBounds(BitmapSource source, string? cacheKey)
     {
-        if (source is null) return source;
+        if (source is null) return new BitmapImage(); // defensive: caller guards, but return empty bitmap instead of null
 
         if (cacheKey is not null && _trimKeyedCache.TryGetValue(cacheKey, out var hit))
             return hit;
@@ -409,8 +421,9 @@ public partial class OverlayWindow : Window
             var result = BitmapSource.Create(newW, newH, 96, 96, PixelFormats.Bgra32, null, cropped, newStride);
             return CacheTrim(cacheKey, source, result);
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Error("TrimTransparentBounds failed — returning untrimmed source.", ex);
             return source;
         }
     }
@@ -776,54 +789,72 @@ public partial class OverlayWindow : Window
     {
         if (hold <= TimeSpan.Zero)
         {
-            FadeOut(exitMs);
+            try { FadeOut(exitMs); }
+            catch (Exception ex) { AppLog.Error("StartHoldTimer immediate FadeOut failed.", ex); Complete(); }
             return;
         }
         StopHoldTimer();
-        _holdTimer = new DispatcherTimer { Interval = hold };
-        _holdTimer.Tick += (_, _) =>
+        try
         {
-            _holdTimer?.Stop();
+            _holdTimer = new DispatcherTimer { Interval = hold };
+            _holdTimer.Tick += (_, _) =>
+            {
+                _holdTimer?.Stop();
+                try { FadeOut(exitMs); }
+                catch (Exception ex) { AppLog.Error("Hold timer FadeOut failed.", ex); Complete(); }
+            };
+            _holdTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("StartHoldTimer creation failed — forcing immediate FadeOut.", ex);
             FadeOut(exitMs);
-        };
-        _holdTimer.Start();
+        }
     }
 
     private void FadeOut(int exitMs)
     {
         if (!_animationRunning) return;
 
-        // Exit animations use the user's selected easing (EaseIn phase).
-        var exitEase = BuildEasing(_easingStyle, EasingMode.EaseIn);
-
-        if (_activeExitStyle == ExitStyle.None)
+        try
         {
-            Complete();
-            return;
+            // Exit animations use the user's selected easing (EaseIn phase).
+            var exitEase = BuildEasing(_easingStyle, EasingMode.EaseIn);
+
+            if (_activeExitStyle == ExitStyle.None)
+            {
+                Complete();
+                return;
+            }
+
+            // Text always fades out with the celebration.
+            CelebrationTextBlock.BeginAnimation(OpacityProperty,
+                new DoubleAnimation(0, TimeSpan.FromMilliseconds(exitMs)) { EasingFunction = exitEase });
+
+            // The image always fades; exit styles add the matching motion on top.
+            AnimateToCompletion(JosephImage, OpacityProperty, 0, exitMs, exitEase);
+
+            switch (_activeExitStyle)
+            {
+                case ExitStyle.Shrink:
+                    AnimateToCompletion(_animScale, ScaleTransform.ScaleXProperty, 0.1, exitMs, exitEase);
+                    AnimateToCompletion(_animScale, ScaleTransform.ScaleYProperty, 0.1, exitMs, exitEase);
+                    break;
+                case ExitStyle.Slide:
+                    AnimateFromCurrent(_animTranslate, TranslateTransform.YProperty, 60, exitMs, exitEase);
+                    break;
+                case ExitStyle.ReverseEntry:
+                    AnimateReverseEntry(exitMs, exitEase);
+                    break;
+                default:
+                case ExitStyle.Fade:
+                    break; // opacity fade already started above
+            }
         }
-
-        // Text always fades out with the celebration.
-        CelebrationTextBlock.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, TimeSpan.FromMilliseconds(exitMs)) { EasingFunction = exitEase });
-
-        // The image always fades; exit styles add the matching motion on top.
-        AnimateToCompletion(JosephImage, OpacityProperty, 0, exitMs, exitEase);
-
-        switch (_activeExitStyle)
+        catch (Exception ex)
         {
-            case ExitStyle.Shrink:
-                AnimateToCompletion(_animScale, ScaleTransform.ScaleXProperty, 0.1, exitMs, exitEase);
-                AnimateToCompletion(_animScale, ScaleTransform.ScaleYProperty, 0.1, exitMs, exitEase);
-                break;
-            case ExitStyle.Slide:
-                AnimateFromCurrent(_animTranslate, TranslateTransform.YProperty, 60, exitMs, exitEase);
-                break;
-            case ExitStyle.ReverseEntry:
-                AnimateReverseEntry(exitMs, exitEase);
-                break;
-            default:
-            case ExitStyle.Fade:
-                break; // opacity fade already started above
+            AppLog.Error("OverlayWindow.FadeOut failed — forcing complete.", ex);
+            Complete();
         }
     }
 
@@ -916,9 +947,16 @@ public partial class OverlayWindow : Window
     {
         if (!_animationRunning) return;
         _animationRunning = false;
-        JosephImage.BeginAnimation(OpacityProperty, null);
-        JosephImage.RenderTransform = null;
-        CelebrationTextBlock.BeginAnimation(OpacityProperty, null);
+        try
+        {
+            JosephImage.BeginAnimation(OpacityProperty, null);
+            JosephImage.RenderTransform = null;
+            CelebrationTextBlock.BeginAnimation(OpacityProperty, null);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"OverlayWindow.Complete: animation cleanup failed: {ex.Message}");
+        }
         Hide();
         var callback = _onCompleted;
         _onCompleted = null;
@@ -927,23 +965,30 @@ public partial class OverlayWindow : Window
 
     private void OverlayWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        if (hwnd != IntPtr.Zero)
+        try
         {
-            var style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-            style |= NativeMethods.WS_EX_LAYERED;
-            style |= NativeMethods.WS_EX_TRANSPARENT;
-            style |= NativeMethods.WS_EX_NOACTIVATE;
-            style |= NativeMethods.WS_EX_TOOLWINDOW;
-            style |= NativeMethods.WS_EX_TOPMOST;
-            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style);
-            NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_FRAMECHANGED);
-        }
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
+                style |= NativeMethods.WS_EX_LAYERED;
+                style |= NativeMethods.WS_EX_TRANSPARENT;
+                style |= NativeMethods.WS_EX_NOACTIVATE;
+                style |= NativeMethods.WS_EX_TOOLWINDOW;
+                style |= NativeMethods.WS_EX_TOPMOST;
+                NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style);
+                NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_FRAMECHANGED);
+            }
 
-        // Guarantee the overlay fills the monitor: once the window is actually
-        // measured (or after any resize/DPI event), re-fit so it never sits on
-        // the 1600x900 fallback or resizes into a partial/overflowing frame.
-        RefitIfNeeded();
+            // Guarantee the overlay fills the monitor: once the window is actually
+            // measured (or after any resize/DPI event), re-fit so it never sits on
+            // the 1600x900 fallback or resizes into a partial/overflowing frame.
+            RefitIfNeeded();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"OverlayWindow_Loaded: native window style setup failed: {ex.Message}");
+        }
     }
 
     private void OverlayWindow_SizeChanged(object sender, SizeChangedEventArgs e)

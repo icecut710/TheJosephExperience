@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using JosephExperience.Utilities;
 
 namespace JosephExperience.Utilities;
 
@@ -123,7 +124,7 @@ public static class ObjModelLoader
                                 bmp.UriSource = new Uri(tp);
                                 bmp.EndInit(); bmp.Freeze();
                                 br = new ImageBrush(bmp) { ViewportUnits = BrushMappingMode.Absolute }; br.Freeze();
-                            } catch { }
+                            } catch (Exception ex) { AppLog.Warn($"3D model texture load failed for \"{tp}\": {ex.Message}"); }
                         }
                         if (br != null) { var e = materials[cur]; materials[cur] = (br, e.color); }
                     }

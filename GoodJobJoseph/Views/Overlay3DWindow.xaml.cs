@@ -35,35 +35,44 @@ public partial class Overlay3DWindow : Window
         _speedDegPerSec = settings.Model3DRotationSpeed > 0 ? settings.Model3DRotationSpeed : 45.0;
         _hold = TimeSpan.FromMilliseconds(Math.Max(400, settings.OverlayDurationMs));
 
-        _model = ObjModelLoader.Load(filePath);
-        if (_model == null)
+        try
         {
-            AppLog.Warn($"3D overlay: failed to load model '{filePath}'.");
-            onCompleted?.Invoke();
-            return;
+            _model = ObjModelLoader.Load(filePath);
+            if (_model == null)
+            {
+                AppLog.Warn($"3D overlay: failed to load model '{filePath}'.");
+                onCompleted?.Invoke();
+                return;
+            }
+
+            NormalizeModel(_model, settings.Model3DScale);
+
+            _angle = 0;
+            _rotateX = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(1, 0, 0), 15));
+            _rotateY = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(0, 1, 0), 0));
+            var transform = new Transform3DGroup();
+            transform.Children.Add(_rotateX);
+            transform.Children.Add(_rotateY);
+            _model.Transform = transform;
+
+            ModelVisual.Content = _model;
+
+            if (settings.Model3DShowGrid) BuildGrid();
+
+            PositionCorner(settings.Model3DCorner, settings.Model3DScale);
+
+            Opacity = 0;
+            Show();
+            var fadeIn = new DoubleAnimation(0, Math.Clamp(settings.ImageOpacity, 0.0, 1.0), TimeSpan.FromMilliseconds(200));
+            fadeIn.Completed += (_, _) => StartHold();
+            BeginAnimation(OpacityProperty, fadeIn);
         }
-
-        NormalizeModel(_model, settings.Model3DScale);
-
-        _angle = 0;
-        _rotateX = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(1, 0, 0), 15));
-        _rotateY = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(0, 1, 0), 0));
-        var transform = new Transform3DGroup();
-        transform.Children.Add(_rotateX);
-        transform.Children.Add(_rotateY);
-        _model.Transform = transform;
-
-        ModelVisual.Content = _model;
-
-        if (settings.Model3DShowGrid) BuildGrid();
-
-        PositionCorner(settings.Model3DCorner, settings.Model3DScale);
-
-        Opacity = 0;
-        Show();
-        var fadeIn = new DoubleAnimation(0, Math.Clamp(settings.ImageOpacity, 0.0, 1.0), TimeSpan.FromMilliseconds(200));
-        fadeIn.Completed += (_, _) => StartHold();
-        BeginAnimation(OpacityProperty, fadeIn);
+        catch (Exception ex)
+        {
+            AppLog.Error($"3D overlay ShowModel failed for '{filePath}':", ex);
+            Hide();
+            onCompleted?.Invoke();
+        }
     }
 
     private void StartHold()
@@ -73,10 +82,14 @@ public partial class Overlay3DWindow : Window
         _holdTimer = new DispatcherTimer { Interval = _hold };
         _holdTimer.Tick += (_, _) =>
         {
-            _holdTimer?.Stop();
-            var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(250));
-            fade.Completed += (_, _) => Complete();
-            BeginAnimation(OpacityProperty, fade);
+            try
+            {
+                _holdTimer?.Stop();
+                var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(250));
+                fade.Completed += (_, _) => Complete();
+                BeginAnimation(OpacityProperty, fade);
+            }
+            catch (Exception ex) { AppLog.Error("3D overlay hold timer error:", ex); }
         };
         _holdTimer.Start();
     }
@@ -88,12 +101,16 @@ public partial class Overlay3DWindow : Window
         _spinTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         _spinTimer.Tick += (_, _) =>
         {
-            var now = Environment.TickCount;
-            var dt = (now - last) / 1000.0;
-            last = now;
-            _angle = (_angle + _speedDegPerSec * dt) % 360;
-            if (_rotateY?.Rotation is AxisAngleRotation3D ay) ay.Angle = _angle;
-            if (_rotateX?.Rotation is AxisAngleRotation3D ax) ax.Angle = 15 + 6 * Math.Sin(_angle * Math.PI / 180);
+            try
+            {
+                var now = Environment.TickCount;
+                var dt = (now - last) / 1000.0;
+                last = now;
+                _angle = (_angle + _speedDegPerSec * dt) % 360;
+                if (_rotateY?.Rotation is AxisAngleRotation3D ay) ay.Angle = _angle;
+                if (_rotateX?.Rotation is AxisAngleRotation3D ax) ax.Angle = 15 + 6 * Math.Sin(_angle * Math.PI / 180);
+            }
+            catch (Exception ex) { AppLog.Error("3D overlay spin timer error:", ex); }
         };
         _spinTimer.Start();
     }
@@ -103,22 +120,36 @@ public partial class Overlay3DWindow : Window
 
     private void Complete()
     {
-        StopSpin();
-        StopHoldTimer();
-        Hide();
-        var cb = _onCompleted;
-        _onCompleted = null;
-        cb?.Invoke();
+        try
+        {
+            StopSpin();
+            StopHoldTimer();
+            Hide();
+            var cb = _onCompleted;
+            _onCompleted = null;
+            cb?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("3D overlay Complete failed: " + ex.Message);
+        }
     }
 
     private void Overlay3DWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        if (hwnd != IntPtr.Zero)
+        try
         {
-            var style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-            style |= NativeMethods.WS_EX_TRANSPARENT | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_TOPMOST;
-            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style);
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
+                style |= NativeMethods.WS_EX_TRANSPARENT | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_TOPMOST;
+                NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, style);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("3D overlay Loaded: native window style setup failed: " + ex.Message);
         }
     }
 

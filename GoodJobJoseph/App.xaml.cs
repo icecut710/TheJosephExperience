@@ -7,6 +7,8 @@ using JosephExperience.Data;
 using JosephExperience.Models;
 using JosephExperience.Services;
 using JosephExperience.Services.CounterStrike;
+using JosephExperience.Services.HalfLife2;
+using JosephExperience.Services.ModernWarfare2;
 using JosephExperience.Utilities;
 using JosephExperience.Views;
 
@@ -30,6 +32,8 @@ public partial class App : Application
     private AudioService? _audio;
     private TrayService? _tray;
     private CounterStrikeIntegrationService? _cs2;
+    private ModernWarfare2Provider? _mw2;
+    private HalfLife2Provider? _hl2;
     private RealNaddService? _naddService;
     private MainWindow? _mainWindow;
     private bool _firstRun;
@@ -292,6 +296,16 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         _celebration = new CelebrationService(_library, _overlay, _audio, _settings, _history, _soundLibrary, _db, _tray);
         _naddService = new RealNaddService();
         _supabase = new SupabaseService(AppPaths.RootDir);
+        _mw2 = new ModernWarfare2Provider(state => AppLog.Info($"MW2 status: {state}"));
+        _hl2 = new HalfLife2Provider(state => AppLog.Info($"HL2 status: {state}"));
+
+        // Wire provider test-event routing through the CS2 router (which has the
+        // per-event configs and cooldown/priority logic). The router routes
+        // through CelebrationService → ShowOverlay, just like live CS2 events.
+        // _cs2 is lazily created in StartGameIntegration(), so the lambda
+        // resolves it at invocation time.
+        _mw2.EventRouter = ev => { _cs2?.ReloadEventConfigs(); _cs2?.Router.Route(ev); };
+        _hl2.EventRouter = ev => { _cs2?.ReloadEventConfigs(); _cs2?.Router.Route(ev); };
 
         Services = new AppSettingsService
         {
@@ -305,6 +319,7 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
             History = _history,
             Supabase = _supabase,
             GameIntegration = () => _cs2,
+            GameProviders = () => new IGameIntegrationProvider?[] { _mw2, _hl2 },
             NaddService = _naddService
         };
     }
@@ -331,6 +346,36 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         {
             _cs2.Stop();
         }
+
+        // Start/stop per-game integration providers (HL2, MW2) alongside CS2
+        StartGameProviders();
+    }
+
+    internal void StartGameProviders()
+    {
+        var enabled = _settings?.Current.GameIntegrationEnabled == true;
+
+        // Set IsEnabled on providers so their detection loops can short-circuit
+        if (_hl2 is not null) _hl2.IsEnabled = enabled;
+        if (_mw2 is not null) _mw2.IsEnabled = enabled;
+
+        _ = Task.Run(async () =>
+        {
+            if (enabled)
+            {
+                try { await (_hl2?.StartAsync() ?? ValueTask.CompletedTask); }
+                catch (Exception ex) { AppLog.Warn($"HL2 provider start error: {ex.Message}"); }
+                try { await (_mw2?.StartAsync() ?? ValueTask.CompletedTask); }
+                catch (Exception ex) { AppLog.Warn($"MW2 provider start error: {ex.Message}"); }
+            }
+            else
+            {
+                try { await (_hl2?.StopAsync() ?? ValueTask.CompletedTask); }
+                catch (Exception ex) { AppLog.Warn($"HL2 provider stop error: {ex.Message}"); }
+                try { await (_mw2?.StopAsync() ?? ValueTask.CompletedTask); }
+                catch (Exception ex) { AppLog.Warn($"MW2 provider stop error: {ex.Message}"); }
+            }
+        });
     }
 
     /// <summary>The live Counter-Strike integration (listener + detector + router), or null before first start.</summary>
@@ -398,6 +443,31 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         }
 
         return new AttachResult(result.Success, result.Message, result.CfgFolder);
+    }
+
+    /// <summary>
+    /// Attempts to launch or restart Counter-Strike 2 via the Steam URI protocol.
+    /// Returns true if the launch was initiated. Does not block.
+    /// </summary>
+    internal bool TryRestartCs2()
+    {
+        try
+        {
+            // Steam URI: steam://run/730 (730 = CS2 app ID)
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "steam://run/730",
+                UseShellExecute = true
+            };
+            Process.Start(startInfo);
+            AppLog.Info("CS2 restart initiated via Steam URI (steam://run/730).");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Failed to launch CS2 via Steam URI: {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>Result object returned by AttachCs2().</summary>
@@ -818,5 +888,6 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         public HistoryService? History { get; init; }
         public SupabaseService? Supabase { get; init; }
         public Func<CounterStrikeIntegrationService?>? GameIntegration { get; init; }
+        public Func<IGameIntegrationProvider?[]>? GameProviders { get; init; }
         public RealNaddService? NaddService { get; init; }
     }

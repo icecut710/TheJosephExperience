@@ -100,6 +100,25 @@ public sealed class CounterStrikeIntegrationService : IDisposable
 
         ReloadEventConfigs();
 
+        // Validate that the GSI config exists and matches current port/token before starting the listener.
+        var cfgFolder = _configManager.FindConfigFolder(s.Cs2AttachPath);
+        if (cfgFolder is null)
+        {
+            SetState(CounterStrikeConnectionPhase.ConfigurationMissing,
+                "CS2 install not found. Click \"Activate & Install CS2\" or use \"Locate Counter-Strike Folder\".");
+            _server.Stop();
+            return;
+        }
+
+        var cfgPath = System.IO.Path.Combine(cfgFolder, _configManager.ConfigFileName);
+        if (!System.IO.File.Exists(cfgPath) || !_configManager.ValidateConfig(cfgPath, port, token))
+        {
+            SetState(CounterStrikeConnectionPhase.ConfigurationInvalid,
+                "GSI config is missing or out of date. Click \"Activate & Install CS2\" to repair.");
+            _server.Stop();
+            return;
+        }
+
         if (_server.TryStart(port, token, out var error))
         {
             SetState(CounterStrikeConnectionPhase.WaitingForGsi,
@@ -259,8 +278,6 @@ public sealed class CounterStrikeIntegrationService : IDisposable
 
     // ------------------------------------------------------------ process monitor
 
-    // ------------------------------------------------------------ process monitor
-
     private DateTime _lastReconnectUtc = DateTime.MinValue;
 
     [SupportedOSPlatform("windows")]
@@ -273,47 +290,51 @@ public sealed class CounterStrikeIntegrationService : IDisposable
                 var running = Process.GetProcessesByName("cs2").Length > 0;
                 var fresh = Freshness;
 
-                if (running && fresh is PayloadFreshness.NeverReceived or PayloadFreshness.Stale
-                    && State.Phase != CounterStrikeConnectionPhase.ReceivingGameState)
+                // Game state went stale while CS2 keeps POSTing nothing — restart the
+                // listener with backoff. (This branch previously required Phase ==
+                // ReceivingGameState while the outer condition excluded it, so it was
+                // unreachable and the listener never self-healed.)
+                if (fresh == PayloadFreshness.Stale && State.Phase == CounterStrikeConnectionPhase.ReceivingGameState
+                    && (DateTime.UtcNow - _lastReconnectUtc).TotalSeconds > 15)
                 {
-                    // If we were previously receiving game state but it went stale
-                    // while CS2 is still running, try a listener restart with backoff.
-                    if (fresh == PayloadFreshness.Stale && State.Phase == CounterStrikeConnectionPhase.ReceivingGameState
-                        && (DateTime.UtcNow - _lastReconnectUtc).TotalSeconds > 15)
+                    AppLog.Info("CS2 GSI: stale connection while CS2 running — attempting listener restart.");
+                    _lastReconnectUtc = DateTime.UtcNow;
+                    _server.Stop();
+                    _previous = null;
+                    _detector.Reset();
+                    var s = _settingsAccessor();
+                    var port = Math.Clamp(s.GameIntegrationPort, 1, 65535);
+                    var token = string.IsNullOrEmpty(s.GameIntegrationAuthToken) ? null : s.GameIntegrationAuthToken;
+                    if (_server.TryStart(port, token, out _))
                     {
-                        AppLog.Info("CS2 GSI: stale connection while CS2 running — attempting listener restart.");
-                        _lastReconnectUtc = DateTime.UtcNow;
-                        _server.Stop();
-                        _previous = null;
-                        _detector.Reset();
-                        var s = _settingsAccessor();
-                        var port = Math.Clamp(s.GameIntegrationPort, 1, 65535);
-                        var token = string.IsNullOrEmpty(s.GameIntegrationAuthToken) ? null : s.GameIntegrationAuthToken;
-                        if (_server.TryStart(port, token, out _))
-                        {
-                            SetState(CounterStrikeConnectionPhase.WaitingForGsi,
-                                $"Listener restarted on http://127.0.0.1:{port}/ — waiting for CS2 to resend game state.");
-                        }
-                        else
-                        {
-                            SetState(CounterStrikeConnectionPhase.PortConflict,
-                                "Listener restart failed — port conflict.");
-                        }
+                        SetState(CounterStrikeConnectionPhase.WaitingForGsi,
+                            $"Listener restarted on http://127.0.0.1:{port}/ — waiting for CS2 to resend game state.");
                     }
                     else
                     {
-                        SetState(CounterStrikeConnectionPhase.Cs2Running,
-                            "CS2 is running but no game state has arrived yet. " +
-                            "Install the GSI config and restart the game.");
+                        SetState(CounterStrikeConnectionPhase.PortConflict,
+                            "Listener restart failed — port conflict.");
                     }
+                }
+                else if (running && fresh is PayloadFreshness.NeverReceived or PayloadFreshness.Stale
+                    && State.Phase != CounterStrikeConnectionPhase.ReceivingGameState)
+                {
+                    SetState(CounterStrikeConnectionPhase.Cs2Running,
+                        "CS2 is running but no game state has arrived yet. " +
+                        "Install the GSI config and restart the game.");
                 }
                 else if (!running && State.Phase == CounterStrikeConnectionPhase.Cs2Running)
                 {
                     SetState(CounterStrikeConnectionPhase.WaitingForGsi,
                         "Waiting for CS2 to start.");
                 }
+                else if (!running && State.Phase == CounterStrikeConnectionPhase.ReceivingGameState)
+                {
+                    SetState(CounterStrikeConnectionPhase.WaitingForCs2,
+                        "CS2 has closed. Waiting for the game to start again.");
+                }
             }
-            catch { /* process enumeration can transiently fail — never crash */ }
+            catch (Exception ex) { AppLog.Warn($"CS2 process enumeration transiently failed: {ex.Message}"); }
             await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
     }

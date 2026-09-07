@@ -177,6 +177,22 @@ public sealed class GameEventRouter
             EventSuppressed?.Invoke(gameEvent, "busy");
             return false;
         }
+        if (isBusy && conflict == GameEventConflictPolicy.Queue)
+        {
+            // Queue: hold the event; the CelebrationService will fire it after the current overlay completes.
+            try
+            {
+                svc.EnqueueGameEvent(gameEvent, config);
+                EventRouted?.Invoke(gameEvent, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"GameEventRouter: queue {gameEvent.Type} failed: {ex.Message}");
+                EventSuppressed?.Invoke(gameEvent, "queue-error");
+                return false;
+            }
+        }
         if (isBusy && conflict == GameEventConflictPolicy.ReplaceLowerPriority)
         {
             if (!svc.TryPreempt(config.Priority))

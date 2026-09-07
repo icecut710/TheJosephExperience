@@ -176,7 +176,7 @@ public class AudioService : IDisposable
                         _soundPlayer?.Play();
                         playOk = true;
                     }
-                    catch { playOk = false; }
+                    catch (Exception ex) { AppLog.Warn($"Audio playback (WAV) failed for \"{path}\": {ex.Message}"); playOk = false; }
                 });
 
                 if (playOk && maxDurationSeconds > 0)
@@ -204,7 +204,7 @@ public class AudioService : IDisposable
                         _mediaPlayer.Play();
                         _currentPlaybackStart = DateTime.UtcNow;
                     }
-                    catch { }
+                    catch (Exception ex) { AppLog.Warn($"Audio playback (MP3/WMA) failed for \"{path}\": {ex.Message}"); }
                 });
 
                 if (maxDurationSeconds > 0)
@@ -244,7 +244,7 @@ public class AudioService : IDisposable
             _maxDurationCts = null;
             _currentPlaybackStart = null;
         }
-        catch { }
+        catch (Exception ex) { AppLog.Warn($"OnMediaEnded cleanup failed: {ex.Message}"); }
     }
 
     /// <summary>

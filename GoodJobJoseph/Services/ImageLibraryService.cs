@@ -573,8 +573,9 @@ public class ImageLibraryService
             var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             return decoder.Frames != null && decoder.Frames.Count > 0;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn($"LoadImageSourceSafe failed for \"{filePath}\": {ex.Message}");
             return false;
         }
     }
@@ -591,7 +592,7 @@ public class ImageLibraryService
         if (File.Exists(thumbPath))
         {
             try { return LoadBitmap(thumbPath); }
-            catch { }
+            catch (Exception ex) { AppLog.Warn($"Thumbnail load failed for \"{thumbPath}\": {ex.Message}"); }
         }
         if (File.Exists(filePath))
         {
@@ -600,7 +601,11 @@ public class ImageLibraryService
                 GenerateThumbnail(filePath, imageId);
                 return LoadBitmap(thumbPath);
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"Thumbnail generation failed for \"{filePath}\": {ex.Message}");
+                return null;
+            }
         }
         return null;
     }
@@ -624,14 +629,26 @@ public class ImageLibraryService
             }
             return LoadBitmap(filePath);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"LoadImageSource failed for \"{filePath}\": {ex.Message}");
+            return null;
+        }
     }
 
     private static BitmapSource? LoadBitmap(string path)
     {
-        using var stream = File.OpenRead(path);
-        var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        return decoder.Frames[0];
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            return decoder.Frames[0];
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"LoadBitmap failed for \"{path}\": {ex.Message}");
+            return null;
+        }
     }
 
     public void GenerateThumbnail(string filePath, string imageId)

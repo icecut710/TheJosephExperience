@@ -77,6 +77,7 @@
 
     <!-- Input & Card brushes -->
     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource SurfaceColor}"/>
+    <SolidColorBrush x:Key="BorderSoftBrush" Color="#3A3F4B"/>
     <SolidColorBrush x:Key="InputBgBrush" Color="{StaticResource InputBgColor}"/>
     <SolidColorBrush x:Key="InputFocusBorderBrush" Color="{StaticResource InputFocusColor}"/>
     <SolidColorBrush x:Key="PlaceholderBrush" Color="{StaticResource PlaceholderColor}"/>
@@ -90,5 +91,44 @@
     <SolidColorBrush x:Key="BgAltBrush" Color="{StaticResource SurfaceColor}"/>
     <SolidColorBrush x:Key="TextSubtleBrush" Color="#5B616A"/>
     <SolidColorBrush x:Key="AccentGlowBrush" Color="#6E7BFF" Opacity="0.15"/>
+
+    <!-- ==================== VISUAL OVERHAUL RESOURCES ==================== -->
+    <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#7C89FF" Offset="0"/>
+        <GradientStop Color="#5A65CC" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="CardGradientBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#131720" Offset="0"/>
+        <GradientStop Color="#0F1218" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="SidebarGradientBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#0D1015" Offset="0"/>
+        <GradientStop Color="#0A0C11" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="ContentGradientBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#090B0F" Offset="0"/>
+        <GradientStop Color="#06070A" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="TitleBarGradientBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#1C2133" Offset="0"/>
+        <GradientStop Color="#161A29" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="StatusBarGradientBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#171C26" Offset="0"/>
+        <GradientStop Color="#12161E" Offset="1"/>
+    </LinearGradientBrush>
+
+    <DropShadowEffect x:Key="CardShadowEffect" BlurRadius="18" Color="#000000"
+                      Opacity="0.35" ShadowDepth="2" Direction="270"/>
+    <DropShadowEffect x:Key="AccentGlowEffect" BlurRadius="16" Color="#6E7BFF"
+                      Opacity="0.5" ShadowDepth="0"/>
+
+    <!-- Shared effects -->
+    <DropShadowEffect x:Key="ShadowEffect" BlurRadius="15" Color="#000000" Opacity="0.3" ShadowDepth="0"/>
 
 </ResourceDictionary>

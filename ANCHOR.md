@@ -46,7 +46,14 @@ GoodJobJoseph.Tests/            # 126 tests
 
 ## Completed
 - All v2.0.2 patches: version strings, "secondary"→"Hotkey" mapping, text cutoff fixes, manifest
-- Released v2.0.2 to GitHub + desktop
+- Released v2.0.2 to GitHub + desktop (commit `42c0767`)
+- Removed Joseph Coins from Market page, status bar, CelebrationService, RealNaddService
+- Fixed LastCelebration stats query in DatabaseService.cs (was replaced with CelebrationsToday/NaddPrice)
+- Enhanced CS2 Steam library discovery: appmanifest_730.acf installdir parsing
+- Added auto-reconnection to CS2 GSI listener on stale game state (15s backoff)
+- Build passes 0 errors, all 126 tests pass
+- Release ZIP updated on GitHub + desktop
+- Manifest updated with new SHA-256: `9B08813A924ACEAEB2139F134F3601EAAE3778023DB0CC9FB3DC9600C83C564F`
 
 ## Active
-Starting CS2/UI overhaul per 70-requirement spec
+Complete visual overhaul: sidebar redesign, status bar redesign, games page polish

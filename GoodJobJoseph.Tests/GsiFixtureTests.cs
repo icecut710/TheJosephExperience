@@ -1,3 +1,4 @@
+using System.IO;
 using JosephExperience.Models.CounterStrike;
 using JosephExperience.Services.CounterStrike;
 using Xunit;
@@ -209,5 +210,78 @@ var roundJson = round.HasValue
         Assert.Contains("tok123", cfg);
         Assert.Contains("player_match_stats", cfg);
         Assert.Equal("gamestate_integration_good_job_joseph.cfg", mgr.ConfigFileName);
+    }
+
+    [Fact]
+    public void ValidateConfig_ValidConfig_ReturnsTrue()
+    {
+        var mgr = new GsiConfigManager();
+        var tmp = Path.GetTempFileName();
+        File.Delete(tmp);
+        tmp = Path.ChangeExtension(tmp, ".cfg");
+        File.WriteAllText(tmp, mgr.BuildConfig(3000, "secret"));
+        Assert.True(mgr.ValidateConfig(tmp, 3000, "secret"));
+        File.Delete(tmp);
+    }
+
+    [Fact]
+    public void ValidateConfig_WrongPort_ReturnsFalse()
+    {
+        var mgr = new GsiConfigManager();
+        var tmp = Path.GetTempFileName();
+        File.Delete(tmp);
+        tmp = Path.ChangeExtension(tmp, ".cfg");
+        File.WriteAllText(tmp, mgr.BuildConfig(3000, "secret"));
+        Assert.False(mgr.ValidateConfig(tmp, 3001, "secret"));
+        File.Delete(tmp);
+    }
+
+    [Fact]
+    public void ValidateConfig_MissingFile_ReturnsFalse()
+    {
+        var mgr = new GsiConfigManager();
+        var tmp = Path.GetTempFileName();
+        File.Delete(tmp);
+        Assert.False(mgr.ValidateConfig(tmp, 3000, null));
+    }
+
+    [Fact]
+    public void InstallOrUpdate_CreatesValidConfig()
+    {
+        var mgr = new GsiConfigManager();
+        var tmpDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tmpDir);
+        try
+        {
+            var result = mgr.InstallOrUpdate(tmpDir, 3000, "tok");
+            Assert.True(result.Success);
+            Assert.NotNull(result.CfgFolder);
+            var cfgPath = Path.Combine(result.CfgFolder!, mgr.ConfigFileName);
+            Assert.True(File.Exists(cfgPath));
+            Assert.True(mgr.ValidateConfig(cfgPath, 3000, "tok"));
+        }
+        finally
+        {
+            Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void ConnectionState_ToString_ReturnsCanonicalNames()
+    {
+        Assert.Equal("Disabled", new CounterStrikeConnectionState(CounterStrikeConnectionPhase.Disabled, "").ToString());
+        Assert.Equal("Receiving Game State", new CounterStrikeConnectionState(CounterStrikeConnectionPhase.ReceivingGameState, "").ToString());
+        Assert.Equal("Configuration Missing", new CounterStrikeConnectionState(CounterStrikeConnectionPhase.ConfigurationMissing, "").ToString());
+        Assert.Equal("Configuration Invalid", new CounterStrikeConnectionState(CounterStrikeConnectionPhase.ConfigurationInvalid, "").ToString());
+        Assert.Equal("Port Conflict", new CounterStrikeConnectionState(CounterStrikeConnectionPhase.PortConflict, "").ToString());
+    }
+
+    [Fact]
+    public void GameEventText_DefaultFor_KnownEvents()
+    {
+        Assert.False(string.IsNullOrWhiteSpace(GameEventText.DefaultFor(GameEventType.Kill)));
+        Assert.False(string.IsNullOrWhiteSpace(GameEventText.DefaultFor(GameEventType.RoundWin)));
+        Assert.False(string.IsNullOrWhiteSpace(GameEventText.DefaultFor(GameEventType.MatchWin)));
+        Assert.False(string.IsNullOrWhiteSpace(GameEventText.DefaultFor(GameEventType.BombPlanted)));
     }
 }

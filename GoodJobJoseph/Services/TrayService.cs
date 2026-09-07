@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using JosephExperience.Utilities;
 
 namespace JosephExperience.Services;
 
@@ -9,6 +10,10 @@ public class TrayService : IDisposable
     private readonly ContextMenuStrip _menu;
     private bool _disposed;
     private bool _shown;
+    private readonly object _notifyLock = new();
+    private string? _lastNotifyKey;
+    private DateTime _lastNotifyUtc = DateTime.MinValue;
+    private readonly TimeSpan _notifyCooldown = TimeSpan.FromSeconds(10);
 
     public TrayService()
     {
@@ -126,6 +131,35 @@ public class TrayService : IDisposable
         else
         {
             _notifyIcon.Text = $"The Joseph Experience\n{status}";
+        }
+    }
+
+    public void ShowNotification(string title, string message,
+        System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
+    {
+        if (!_shown) return;
+
+        var key = $"{title}|{message}|{icon}";
+        var now = DateTime.UtcNow;
+
+        lock (_notifyLock)
+        {
+            // Rate-limit: suppress duplicate notifications within the cooldown window.
+            if (_lastNotifyKey == key && now - _lastNotifyUtc < _notifyCooldown)
+            {
+                return;
+            }
+            _lastNotifyKey = key;
+            _lastNotifyUtc = now;
+        }
+
+        try
+        {
+            _notifyIcon.ShowBalloonTip(4000, title, message, icon);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Failed to show tray notification.", ex);
         }
     }
 

@@ -103,6 +103,9 @@ public class SupabaseService : IDisposable
     public bool SyncInProgress { get; private set; }
     public int SyncFailuresInRow { get; private set; }
     public string LastError { get; private set; } = string.Empty;
+    public long UsedBytes { get; private set; } = 0;
+    public long QuotaBytes { get; private set; } = 0;
+    public int UsedPercent => QuotaBytes > 0 ? (int)Math.Round(100.0 * UsedBytes / QuotaBytes) : 0;
 
     /// <summary>True only after at least one successful authenticated request recently.</summary>
     public bool IsConnected => State == SupabaseState.Connected || State == SupabaseState.Syncing;
@@ -111,7 +114,7 @@ public class SupabaseService : IDisposable
     {
         SupabaseState.NotConfigured => "NOT CONFIGURED",
         SupabaseState.Connecting => "CONNECTING",
-        SupabaseState.Connected => "CONNECTED",
+        SupabaseState.Connected => $"CONNECTED{(QuotaBytes > 0 ? $" — {UsedBytesBytesFormat(UsedBytes)} / {QuotaBytesBytesFormat(QuotaBytes)} ({UsedPercent}%)" : "")}",
         SupabaseState.Syncing => "SYNCING",
         SupabaseState.Offline => "OFFLINE",
         SupabaseState.Error => "ERROR",
@@ -216,7 +219,9 @@ public class SupabaseService : IDisposable
             return $"configured: {(Config.IsConfigured ? "YES" : "NO")}; project: {host}; "
                  + $"key present: {(Config.IsConfigured ? "YES" : "NO")}; "
                  + $"state: {StateText}; remote rows: {LastRemoteRows}; downloaded: {LastDownloaded}; "
-                 + $"reconciled: {LastReconciled}; last sync: {LastSyncUtc?.ToString("s") ?? "never"}";
+                 + $"reconciled: {LastReconciled}; last sync: {LastSyncUtc?.ToString("s") ?? "never"}; "
+                 + $"bucket used: {UsedBytesBytesFormat(UsedBytes)} / {QuotaBytesBytesFormat(QuotaBytes)}; "
+                 + $"bucket used%: {UsedPercent}%";
         }
     }
 
@@ -224,7 +229,7 @@ public class SupabaseService : IDisposable
     /// Tests connectivity with a real authenticated catalog request. Updates
     /// State truthfully (CONNECTED / OFFLINE / ERROR / NOT CONFIGURED).
     /// </summary>
-    public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct = default)
+public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct = default)
     {
         var result = new SupabaseSyncResult();
         if (!Config.IsConfigured)
@@ -242,6 +247,9 @@ public class SupabaseService : IDisposable
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(20));
             await FetchCatalogAsync(1, cts.Token).ConfigureAwait(false);
+
+            // Also fetch bucket info so clients see usage after first connect
+            await GetBucketInfoAsync(cts.Token).ConfigureAwait(false);
 
             LastSuccessUtc = DateTime.UtcNow;
             State = SupabaseState.Connected;
@@ -266,7 +274,71 @@ public class SupabaseService : IDisposable
         }
     }
 
-private static string DescribeHttpError(int status)
+    /// <summary>
+    /// Fetches bucket quota and usage from Supabase storage API.
+    /// Updates <see cref="UsedBytes"/> and <see cref="QuotaBytes"/>.
+    /// </summary>
+    public async Task GetBucketInfoAsync(CancellationToken ct = default)
+    {
+        if (!Config.IsConfigured)
+        {
+            UsedBytes = 0;
+            QuotaBytes = 0;
+            return;
+        }
+
+        try
+        {
+            var bucket = Config.BucketFor(StorageObjectKey.MediaType.Images);
+            var url = $"{Config.Url}/storage/v1/bucket/{bucket}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("apikey", Config.AnonKey);
+            request.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
+            using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("quota_bytes", out var q) && q.ValueKind == JsonValueKind.Number)
+                {
+                    QuotaBytes = q.GetInt64();
+                }
+                if (doc.RootElement.TryGetProperty("used_bytes", out var u) && u.ValueKind == JsonValueKind.Number)
+                {
+                    UsedBytes = u.GetInt64();
+                }
+                AppLog.Info($"Supabase: bucket info — used {UsedBytesBytesFormat(UsedBytes)} / {QuotaBytesBytesFormat(QuotaBytes)}.");
+            }
+            else
+            {
+                AppLog.Warn($"Supabase: failed to fetch bucket info ({(int)response.StatusCode}).");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Supabase: bucket info error: {ex.Message}");
+        }
+    }
+
+    public static string UsedBytesBytesFormat(long bytes)
+    {
+        if (bytes >= 1L << 40) return $"{bytes / (1L << 40):N0} TiB";
+        if (bytes >= 1L << 30) return $"{bytes / (1L << 30):N0} GiB";
+        if (bytes >= 1L << 20) return $"{bytes / (1L << 20):N0} MiB";
+        if (bytes >= 1L << 10) return $"{bytes / (1L << 10):N0} KiB";
+        return $"{bytes} bytes";
+    }
+
+    public static string QuotaBytesBytesFormat(long bytes)
+    {
+        if (bytes >= 1L << 40) return $"{bytes / (1L << 40):N0} TiB";
+        if (bytes >= 1L << 30) return $"{bytes / (1L << 30):N0} GiB";
+        if (bytes >= 1L << 20) return $"{bytes / (1L << 20):N0} MiB";
+        if (bytes >= 1L << 10) return $"{bytes / (1L << 10):N0} KiB";
+        return $"{bytes} bytes";
+    }
+
+    private static string DescribeHttpError(int status)
     {
         return status switch
         {
@@ -360,6 +432,9 @@ private static string DescribeHttpError(int status)
         SyncInProgress = true;
         State = SupabaseState.Syncing;
         AppLog.Info($"Supabase: sync starting ({DiagnosticsSummary})");
+
+        // Fetch bucket quota/usage — shared across all clients
+        await GetBucketInfoAsync().ConfigureAwait(false);
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
 

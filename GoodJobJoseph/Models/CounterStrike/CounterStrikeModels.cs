@@ -26,7 +26,8 @@ public enum GameEventType
     RoundStart,
     MatchStart,
     /// <summary>Used only by the Settings "Test" buttons.</summary>
-    Test
+    Test,
+    LevelChanged,
 }
 
 /// <summary>A semantic event derived from GSI state transitions.</summary>
@@ -43,8 +44,17 @@ public sealed record CelebrationGameEvent
     public bool IsTest { get; init; }
     public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.Ordinal);
 
-    /// <summary>Stable trigger-source string, e.g. "CounterStrike:Kill" or "CounterStrike:Test:DoubleKill".</summary>
-    public string Source => IsTest ? $"CounterStrike:Test:{Type}" : $"CounterStrike:{Type}";
+    /// <summary>Stable trigger-source string, e.g. "CounterStrike:Kill" or "HalfLife2:RoundWin".</summary>
+    public string Source
+    {
+        get
+        {
+            var prefix = Metadata.TryGetValue("Source", out var s) && !string.IsNullOrEmpty(s)
+                ? s
+                : "CounterStrike";
+            return IsTest ? $"{prefix}:Test:{Type}" : $"{prefix}:{Type}";
+        }
+    }
 
     /// <summary>Alias used by the router and integration service.</summary>
     public string SourceTag => Source;

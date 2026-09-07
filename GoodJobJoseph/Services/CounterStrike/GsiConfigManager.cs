@@ -157,7 +157,7 @@ public sealed class GsiConfigManager : IGsiConfigManager
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"GsiConfigManager.ParseInstallDir failed: {ex.Message}");
+            AppLog.Warn($"CS2: config parse install dir failed: {ex.Message}");
         }
         return null;
     }
@@ -208,7 +208,7 @@ public sealed class GsiConfigManager : IGsiConfigManager
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"GsiConfigManager.ValidateConfig failed: {ex.Message}");
+            AppLog.Warn($"CS2: config validate failed: {ex.Message}");
             return false;
         }
     }
@@ -268,7 +268,7 @@ public sealed class GsiConfigManager : IGsiConfigManager
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"GsiConfigManager.InstallOrUpdate failed: {ex.Message}");
+            AppLog.Warn($"CS2: config install/update failed: {ex.Message}");
             return new GsiConfigInstallResult(
                 GsiConfigInstallStatus.WriteFailed,
                 $"Could Not Write Configuration: {ex.Message}", null, null);
@@ -311,17 +311,17 @@ public sealed class GsiConfigManager : IGsiConfigManager
         }
         catch (UnauthorizedAccessException)
         {
-            AppLog.Warn($"GsiConfigManager.CanWrite: UnauthorizedAccessException writing to {dir}");
+            AppLog.Warn($"CS2: config write unauthorized to {dir}");
             return false;
         }
         catch (IOException ex)
         {
-            AppLog.Warn($"GsiConfigManager.CanWrite: IOException writing to {dir}: {ex.Message}");
+            AppLog.Warn($"CS2: config write io error to {dir}: {ex.Message}");
             return false;
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"GsiConfigManager.CanWrite: unexpected error writing to {dir}: {ex.Message}");
+            AppLog.Warn($"CS2: config write unexpected error to {dir}: {ex.Message}");
             return false;
         }
     }

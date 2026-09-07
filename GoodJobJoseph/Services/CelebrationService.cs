@@ -23,6 +23,15 @@ public class CelebrationService
     private readonly object _celebrationGuard = new();
     private bool _isCelebrating;
 
+    /// <summary>Bounded queue for events that arrive while busy (Queue conflict policy).</summary>
+    private readonly Queue<(CelebrationGameEvent evt, GameEventCelebrationConfig cfg)> _queue = new();
+    private const int MaxQueuedEvents = 8;
+
+    private int _consecutiveOverlayFailures;
+    private const int OverlayFailureThreshold = 5;
+    private DateTime _overlayFailureCooldownUntil = DateTime.MinValue;
+    private readonly TimeSpan _overlayCooldownDuration = TimeSpan.FromMinutes(5);
+
     public event Action<string?>? CelebrationStarted;
 
     /// <summary>Fired when the F8 audio-toggle hotkey flips the play-sound state.</summary>
@@ -65,6 +74,8 @@ public class CelebrationService
         var settings = _settings.Current;
         if (!settings.Enabled) return false;
 
+        if (IsOverlayCircuitOpen()) return false;
+
         var image = _library.PickImage(
             settings.ImageMode,
             settings.UseFavoritesOnly,
@@ -85,12 +96,13 @@ public class CelebrationService
         }
 
         var source = ImageLibraryService.LoadImageSource(image.FilePath) as System.Windows.Media.Imaging.BitmapSource;
+        source = ValidateBitmapSource(source, image.Id, image.FilePath);
         if (source is null)
         {
             _library.MarkBroken(image.Id);
             image = _library.PickImage(ImageMode.Random, false, false, null, null);
             source = image is not null
-                ? ImageLibraryService.LoadImageSource(image.FilePath) as System.Windows.Media.Imaging.BitmapSource
+                ? ValidateBitmapSource(ImageLibraryService.LoadImageSource(image.FilePath) as System.Windows.Media.Imaging.BitmapSource, image.Id, image.FilePath)
                 : null;
         }
         if (source is null)
@@ -153,15 +165,52 @@ public class CelebrationService
             return true;
         }
 
-        _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
-        {
-            _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
-            _history?.AddEntry(image.Id, image.DisplayName, triggerType ?? "manual", false, overlaySettings.OverlayDurationMs);
-        }, image.Id);
-
-        _audio.PlaySound(settings, image);
-        CelebrationStarted?.Invoke(image.DisplayName);
+            try
+            {
+                _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
+                {
+                    _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
+                    _history?.AddEntry(image.Id, image.DisplayName, triggerType ?? "manual", false, overlaySettings.OverlayDurationMs);
+                }, image.Id);
+                RecordOverlaySuccess();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"Failed to show overlay for image \"{image.DisplayName}\" (id={image.Id}):", ex);
+                RecordOverlayFailure();
+                _tray?.ShowNotification("Joseph", "Failed to display overlay — see log for details.",
+                    System.Windows.Forms.ToolTipIcon.Error);
+            }
+            _audio.PlaySound(settings, image);
+            CelebrationStarted?.Invoke(image.DisplayName);
         return true;
+    }
+
+    /// <summary>
+    /// Validates that a decoded BitmapSource is usable for overlay display.
+    /// Rejects null, zero/negative dimensions, and DPI <= 0 — all of which
+    /// would cause layout crashes in OverlayWindow.ComputePlacement/ApplySizeAndPosition.
+    /// Marks the image broken in the library so it gets pruned from future picks.
+    /// </summary>
+    private static System.Windows.Media.Imaging.BitmapSource? ValidateBitmapSource(
+        System.Windows.Media.Imaging.BitmapSource? source, string imageId, string filePath)
+    {
+        if (source is null)
+        {
+            AppLog.Warn($"Image source was null after decode (id={imageId}, path=\"{filePath}\").");
+            return null;
+        }
+        if (source.PixelWidth <= 0 || source.PixelHeight <= 0)
+        {
+            AppLog.Warn($"Image source has invalid dimensions {source.PixelWidth}x{source.PixelHeight} (id={imageId}, path=\"{filePath}\").");
+            return null;
+        }
+        if (source.DpiX <= 0 || source.DpiY <= 0)
+        {
+            AppLog.Warn($"Image source has invalid DPI ({source.DpiX}, {source.DpiY}) (id={imageId}, path=\"{filePath}\").");
+            return null;
+        }
+        return source;
     }
 
     private void ShowModel3D(string filePath, AppSettings settings, string imageId, string triggerType)
@@ -170,13 +219,38 @@ public class CelebrationService
         {
             if (_overlay3d == null)
             {
-                _overlay3d = new Views.Overlay3DWindow();
+                try
+                {
+                    _overlay3d = new Views.Overlay3DWindow();
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error($"Failed to create 3D overlay window (id={imageId}, path=\"{filePath}\").", ex);
+                    _tray?.ShowNotification("Joseph", "3D overlay failed to initialize — see log for details.",
+                        System.Windows.Forms.ToolTipIcon.Error);
+                    RecordOverlayFailure();
+                    return;
+                }
             }
         }
-        _overlay3d.ShowModel(filePath, settings, () =>
+
+        if (_overlay3d is null) return;
+
+        try
         {
-            _library.RecordShown(imageId, triggerType, settings.OverlayDurationMs);
-        });
+            _overlay3d.ShowModel(filePath, settings, () =>
+            {
+                _library.RecordShown(imageId, triggerType, settings.OverlayDurationMs);
+            });
+            RecordOverlaySuccess();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"3D overlay ShowModel failed (id={imageId}, path=\"{filePath}\").", ex);
+            RecordOverlayFailure();
+            _tray?.ShowNotification("Joseph", "3D overlay failed — see log for details.",
+                System.Windows.Forms.ToolTipIcon.Error);
+        }
     }
 
     public string? LastShownImageId => _lastShownImageId;
@@ -251,7 +325,7 @@ public class CelebrationService
     }
 
     /// <summary>True while an overlay is currently on screen.</summary>
-    public bool IsBusy => _isCelebrating || _overlay.IsVisible;
+    public virtual bool IsBusy => _isCelebrating || (_overlay?.IsVisible ?? false);
 
     private int _activePriority;
 
@@ -259,9 +333,9 @@ public class CelebrationService
     /// Priority arbitration: a higher-priority game event may replace the current celebration.
     /// Returns true if the caller may proceed.
     /// </summary>
-    public bool TryPreempt(int priority)
+    public virtual bool TryPreempt(int priority)
     {
-        if (!_isCelebrating && !_overlay.IsVisible) return true;
+        if (!_isCelebrating && !(_overlay?.IsVisible ?? false)) return true;
         if (priority > _activePriority)
         {
             AppLog.Info($"Celebration preempted: priority {_activePriority} -> {priority}");
@@ -273,18 +347,38 @@ public class CelebrationService
     }
 
     /// <summary>
+    /// Queues a game event for playback after the current celebration completes.
+    /// Used by the Queue conflict policy. Drops the oldest entry if the queue
+    /// exceeds MaxQueuedEvents to prevent unbounded memory growth during events
+    /// like deathmatch spray.
+    /// </summary>
+    public virtual void EnqueueGameEvent(CelebrationGameEvent gameEvent, GameEventCelebrationConfig config)
+    {
+        lock (_celebrationGuard)
+        {
+            if (_queue.Count >= MaxQueuedEvents)
+            {
+                _queue.Dequeue(); // drop oldest
+            }
+            _queue.Enqueue((gameEvent, config));
+            AppLog.Info($"Game event queued: {gameEvent.Type} (queue depth: {_queue.Count})");
+        }
+    }
+
+    /// <summary>
     /// Entry point for Counter-Strike game events (and other routed triggers).
     /// Maps the per-event config onto the normal celebration pipeline.
     /// </summary>
-    public bool TriggerGameEvent(string triggerType, GameEventCelebrationConfig config,
+    public virtual bool TriggerGameEvent(string triggerType, GameEventCelebrationConfig config,
         CelebrationGameEvent gameEvent)
     {
+        var settings = _settings.Current;
+        if (!settings.Enabled) return false;
+        if (IsOverlayCircuitOpen()) return false;
         if (_isCelebrating) return false;
         _isCelebrating = true;
         try
         {
-            var settings = _settings.Current;
-            if (!settings.Enabled) return false;
             if (config.Source == GameEventCelebrationSource.NoCelebration) return false;
 
             _activePriority = config.Priority;
@@ -311,6 +405,7 @@ public class CelebrationService
             }
 
             var source = ImageLibraryService.LoadImageSource(image.FilePath) as System.Windows.Media.Imaging.BitmapSource;
+            source = ValidateBitmapSource(source, image.Id, image.FilePath);
             if (source is null)
             {
                 _library.MarkBroken(image.Id);
@@ -365,11 +460,22 @@ public class CelebrationService
                 return true;
             }
 
-            _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
+            try
             {
-                _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
-                _history?.AddEntry(image.Id, image.DisplayName, triggerType, false, overlaySettings.OverlayDurationMs);
-            }, image.Id);
+                _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
+                {
+                    _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
+                    _history?.AddEntry(image.Id, image.DisplayName, triggerType, false, overlaySettings.OverlayDurationMs);
+                }, image.Id);
+                RecordOverlaySuccess();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"TriggerGameEvent: failed to show overlay for \"{image.DisplayName}\" (id={image.Id}), trigger=\"{triggerType}\":", ex);
+                RecordOverlayFailure();
+                _tray?.ShowNotification("Joseph", "Failed to display overlay — see log for details.",
+                    System.Windows.Forms.ToolTipIcon.Error);
+            }
             _audio.PlaySound(settings, image);
             CelebrationStarted?.Invoke(image.DisplayName);
             return true;
@@ -377,6 +483,62 @@ public class CelebrationService
         finally
         {
             _isCelebrating = false;
+            DequeueNext();
+        }
+    }
+
+    /// <summary>Drains the queued event backlog after the current celebration completes.</summary>
+    private void DequeueNext()
+    {
+        lock (_celebrationGuard)
+        {
+            if (_queue.Count == 0) return;
+            var (evt, cfg) = _queue.Dequeue();
+            AppLog.Info($"Processing queued game event: {evt.Type} (remaining: {_queue.Count})");
+            // Re-enter TriggerGameEvent on a background thread so the current call stack unwinds first.
+            Task.Run(() => TriggerGameEvent(evt.SourceTag, cfg, evt));
+        }
+    }
+
+    /// <summary>
+    /// Circuit breaker: after <see cref="OverlayFailureThreshold"/> consecutive overlay
+    /// failures, temporarily stops attempting overlays to avoid spamming
+    /// the log/tray. Resets after the cooldown window expires.
+    /// </summary>
+    private bool IsOverlayCircuitOpen()
+    {
+        if (_consecutiveOverlayFailures < OverlayFailureThreshold) return false;
+        if (DateTime.UtcNow < _overlayFailureCooldownUntil)
+        {
+            AppLog.Warn($"Overlay circuit open: {_consecutiveOverlayFailures} consecutive failures, suppressing for {_overlayCooldownDuration.TotalMinutes} min.");
+            return true;
+        }
+        AppLog.Info("Overlay circuit half-open — re-enabling overlay attempts.");
+        _consecutiveOverlayFailures = 0;
+        return false;
+    }
+
+    private void RecordOverlayFailure()
+    {
+        var failures = Interlocked.Increment(ref _consecutiveOverlayFailures);
+        if (failures == OverlayFailureThreshold)
+        {
+            _overlayFailureCooldownUntil = DateTime.UtcNow.Add(_overlayCooldownDuration);
+            _tray?.ShowNotification("Joseph",
+                "Overlay disabled after 5 consecutive failures. Check the log for details. Re-enabling in 5 minutes.",
+                System.Windows.Forms.ToolTipIcon.Warning);
+        }
+    }
+
+    private void RecordOverlaySuccess()
+    {
+        if (Volatile.Read(ref _consecutiveOverlayFailures) > 0)
+        {
+            _consecutiveOverlayFailures = 0;
+            if (DateTime.UtcNow >= _overlayFailureCooldownUntil)
+            {
+                _overlayFailureCooldownUntil = DateTime.MinValue;
+            }
         }
     }
 }

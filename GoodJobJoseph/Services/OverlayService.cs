@@ -27,8 +27,9 @@ public class OverlayService
         {
             _overlay = new OverlayWindow();
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Error("Failed to create OverlayWindow — overlays will be disabled.", ex);
             _overlay = null;
         }
     }
@@ -51,8 +52,9 @@ public class OverlayService
             _overlay?.ForceComplete();
             _overlay?.Close();
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Error("TriggerShutdownForTest failed.", ex);
         }
     }
 
@@ -65,40 +67,54 @@ public class OverlayService
         {
             if (_overlay is null)
             {
+                AppLog.Warn("ShowOverlay called but no OverlayWindow is available (creation failed).");
                 onCompleted?.Invoke();
                 return;
             }
 
-            var monitorRect = ResolveMonitorRect(settings.MonitorMode);
-
-            if (_showing && _overlay.IsVisible)
+            try
             {
-                _overlay.ForceComplete();
-            }
+                var monitorRect = ResolveMonitorRect(settings.MonitorMode);
 
-            var (winX, winY, winW, winH) = ComputePlacement(settings, monitorRect, imageSource);
-
-            _overlay.Left = monitorRect.Left;
-            _overlay.Top = monitorRect.Top;
-            _overlay.Width = monitorRect.Width;
-            _overlay.Height = monitorRect.Height;
-
-            var relRect = new Rect(
-                Math.Max(0, winX - monitorRect.Left),
-                Math.Max(0, winY - monitorRect.Top),
-                winW, winH);
-
-            _overlay.Show();
-
-            _showing = true;
-            _overlay.ShowOverlay(imageSource, settings, relRect, null, null, () =>
-            {
-                lock (_lock)
+                if (_showing && _overlay.IsVisible)
                 {
-                    _showing = false;
+                    _overlay.ForceComplete();
                 }
+
+                var (winX, winY, winW, winH) = ComputePlacement(settings, monitorRect, imageSource);
+
+                _overlay.Left = monitorRect.Left;
+                _overlay.Top = monitorRect.Top;
+                _overlay.Width = monitorRect.Width;
+                _overlay.Height = monitorRect.Height;
+
+                var relRect = new Rect(
+                    Math.Max(0, winX - monitorRect.Left),
+                    Math.Max(0, winY - monitorRect.Top),
+                    winW, winH);
+
+                _overlay.Show();
+
+                _showing = true;
+                _overlay.ShowOverlay(imageSource, settings, relRect, null, null, () =>
+                {
+                    lock (_lock)
+                    {
+                        _showing = false;
+                    }
+                    onCompleted?.Invoke();
+                }, cacheKey);
+            }
+            catch (Exception ex)
+            {
+                var imgInfo = imageSource is not null
+                    ? $"src={imageSource.PixelWidth}x{imageSource.PixelHeight} fmt={imageSource.Format}"
+                    : "src=null";
+                AppLog.Error($"ShowOverlay (2-arg) failed: cacheKey=\"{cacheKey}\", {imgInfo}, monitor={settings.MonitorMode}, position={settings.ImagePosition}, fitMode={settings.FitMode}", ex);
+                _showing = false;
+                _overlay.ForceHide();
                 onCompleted?.Invoke();
-            }, cacheKey);
+            }
         }
     }
 
@@ -108,40 +124,54 @@ public class OverlayService
         {
             if (_overlay is null)
             {
+                AppLog.Warn("ShowOverlay called but no OverlayWindow is available (creation failed).");
                 onCompleted?.Invoke();
                 return;
             }
 
-            var monitorRect = ResolveMonitorRect(settings.MonitorMode);
-
-            if (_showing && _overlay.IsVisible)
+            try
             {
-                _overlay.ForceComplete();
-            }
+                var monitorRect = ResolveMonitorRect(settings.MonitorMode);
 
-            var (winX, winY, winW, winH) = ComputePlacement(settings, monitorRect, imageSource);
-
-            _overlay.Left = monitorRect.Left;
-            _overlay.Top = monitorRect.Top;
-            _overlay.Width = monitorRect.Width;
-            _overlay.Height = monitorRect.Height;
-
-            var relRect = new Rect(
-                Math.Max(0, winX - monitorRect.Left),
-                Math.Max(0, winY - monitorRect.Top),
-                winW, winH);
-
-            _overlay.Show();
-
-            _showing = true;
-            _overlay.ShowOverlay(imageSource, settings, relRect, quoteText, resolved, () =>
-            {
-                lock (_lock)
+                if (_showing && _overlay.IsVisible)
                 {
-                    _showing = false;
+                    _overlay.ForceComplete();
                 }
+
+                var (winX, winY, winW, winH) = ComputePlacement(settings, monitorRect, imageSource);
+
+                _overlay.Left = monitorRect.Left;
+                _overlay.Top = monitorRect.Top;
+                _overlay.Width = monitorRect.Width;
+                _overlay.Height = monitorRect.Height;
+
+                var relRect = new Rect(
+                    Math.Max(0, winX - monitorRect.Left),
+                    Math.Max(0, winY - monitorRect.Top),
+                    winW, winH);
+
+                _overlay.Show();
+
+                _showing = true;
+                _overlay.ShowOverlay(imageSource, settings, relRect, quoteText, resolved, () =>
+                {
+                    lock (_lock)
+                    {
+                        _showing = false;
+                    }
+                    onCompleted?.Invoke();
+                }, cacheKey);
+            }
+            catch (Exception ex)
+            {
+                var imgInfo = imageSource is not null
+                    ? $"src={imageSource.PixelWidth}x{imageSource.PixelHeight} fmt={imageSource.Format}"
+                    : "src=null";
+                AppLog.Error($"ShowOverlay failed: quote=\"{quoteText}\", cacheKey=\"{cacheKey}\", {imgInfo}, monitor={settings.MonitorMode}, position={settings.ImagePosition}, fitMode={settings.FitMode}", ex);
+                _showing = false;
+                _overlay.ForceHide();
                 onCompleted?.Invoke();
-            }, cacheKey);
+            }
         }
     }
 
@@ -378,6 +408,7 @@ public class OverlayService
             }
         }
 
+        AppLog.Warn("Could not resolve monitor info — falling back to primary screen dimensions.");
         return new Rect(0, 0,
             SystemParameters.PrimaryScreenWidth > 0 ? SystemParameters.PrimaryScreenWidth : 1920,
             SystemParameters.PrimaryScreenHeight > 0 ? SystemParameters.PrimaryScreenHeight : 1080);
