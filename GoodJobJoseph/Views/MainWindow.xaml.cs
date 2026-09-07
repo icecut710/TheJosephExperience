@@ -4761,19 +4761,32 @@ private StackPanel BuildSettingsSounds()
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 12, 8),
             Child = grid,
-            Effect = (Effect)FindResource("CardShadowEffect")
+            // Clone: per-tile shadow so hover animations don't pulse every tile at once.
+            Effect = ((Effect)FindResource("CardShadowEffect")).Clone(),
+            RenderTransform = new TranslateTransform()
         };
 
-        // Hover animation
+        // Hover animation: background shift + gentle lift, matching the card language.
+        var tileLift = (TranslateTransform)tile.RenderTransform;
         tile.MouseEnter += (_, _) =>
         {
             tile.Background = (Brush)FindResource("HoverBrush");
             tile.BorderBrush = (Brush)FindResource("HoverBorderBrush");
+            var up = new DoubleAnimation(0, -1.5, TimeSpan.FromMilliseconds(140))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            tileLift.BeginAnimation(TranslateTransform.YProperty, up);
         };
         tile.MouseLeave += (_, _) =>
         {
             tile.Background = bgBrush;
             tile.BorderBrush = borderBrush;
+            var down = new DoubleAnimation(tileLift.Y, 0, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            tileLift.BeginAnimation(TranslateTransform.YProperty, down);
         };
 
         return tile;
