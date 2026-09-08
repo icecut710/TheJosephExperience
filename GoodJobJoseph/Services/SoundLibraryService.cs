@@ -98,7 +98,7 @@ public class SoundLibraryService
             var clip = new SoundClip
             {
                 Id = Guid.NewGuid().ToString(),
-                DisplayName = Path.GetFileNameWithoutExtension(sourcePath),
+                DisplayName = SoundLorePools.RandomSoundName(Path.GetFileNameWithoutExtension(sourcePath)),
                 FileName = safeName,
                 FilePath = dest,
                 Extension = ext,
@@ -160,4 +160,40 @@ public class ImportSoundResult
     public bool SkippedDuplicate { get; set; }
     public string? Error { get; set; }
     public SoundClip? Sound { get; set; }
+}
+
+/// <summary>
+/// Assigns a random lore name to imported sounds that have generic filenames
+/// (e.g. "audio.mp3", "recording.wav"). If the filename is already meaningful,
+/// it's kept as-is.
+/// </summary>
+public static class SoundLorePools
+{
+    private static readonly string[] SoundNames = new[]
+    {
+        "Joseph's Holy Giggle", "The Sacred Chuckle", "Blessed Backseat Laugh",
+        "Divine Snort", "The Righteous Cackle", "Saint Joseph's Belly Laugh",
+        "Heavenly Chortle", "The Memorable Guffaw", "Joseph's Joyful Noise",
+        "The Eternal Snicker", "Glorious Wheeze", "The Unbroken Cackle",
+        "Celestial Titter", "The Triumphant Bark", "Resplendent Giggle",
+        "The Peerless Snort", "Holy Hilarity", "The Illustrious Chuckle",
+        "Venerable Chortle", "The Magnificent Guffaw"
+    };
+
+    private static readonly HashSet<string> GenericNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "audio", "sound", "recording", "clip", "file", "untitled", "new audio",
+        "new sound", "new recording", "import", "imported", "rec", "voice",
+        "microphone", "mic", "beep", "tone", "music", "song", "track"
+    };
+
+    public static string RandomSoundName(string originalName)
+    {
+        // If the name looks generic/random, replace it with a lore name.
+        if (string.IsNullOrWhiteSpace(originalName) || GenericNames.Contains(originalName.Trim()))
+        {
+            return SoundNames[Random.Shared.Next(SoundNames.Length)];
+        }
+        return originalName;
+    }
 }

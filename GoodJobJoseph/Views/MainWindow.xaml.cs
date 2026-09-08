@@ -2503,10 +2503,29 @@ public partial class MainWindow : Window
 
     private void ShowLibraryView()
     {
-        var images = Services.Library!.GetAllImages();
-
         var page = new StackPanel { Margin = new Thickness(0, 0, 0, 0) };
-        page.Children.Add(CreatePageHeader("Library", "Browse, search, and organize your Joseph collection."));
+        page.Children.Add(CreatePageHeader("Library", "Browse, search, and organize your Joseph collection and sound clips."));
+
+        // Tab switcher: Images | Audios
+        var tabRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+        var imagesTab = new Button { Content = "🖼 Images", Style = (Style)FindResource("FilterChipActive"), Margin = new Thickness(0, 0, 6, 0), Tag = "images" };
+        var audiosTab = new Button { Content = "🔊 Audios", Style = (Style)FindResource("FilterChip"), Margin = new Thickness(0, 0, 6, 0), Tag = "audios" };
+        imagesTab.Click += (_, _) => { imagesTab.Style = (Style)FindResource("FilterChipActive"); audiosTab.Style = (Style)FindResource("FilterChip"); ShowLibraryImagesPage(page); };
+        audiosTab.Click += (_, _) => { audiosTab.Style = (Style)FindResource("FilterChipActive"); imagesTab.Style = (Style)FindResource("FilterChip"); ShowLibraryAudioPage(page); };
+        tabRow.Children.Add(imagesTab);
+        tabRow.Children.Add(audiosTab);
+        page.Children.Add(tabRow);
+
+        _libraryPageRoot = page;
+        ShowLibraryImagesPage(page);
+        CrossFade(page);
+    }
+
+        private StackPanel? _libraryPageRoot;
+
+    private void ShowLibraryImagesPage(StackPanel page)
+    {
+        var images = Services.Library!.GetAllImages();
 
         var root = new Grid { Margin = new Thickness(0, 0, 0, 0) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -2592,6 +2611,113 @@ public partial class MainWindow : Window
 
         page.Children.Add(root);
         CrossFade(page);
+    }
+
+    // Lorepool — random names for imported files that the user didn't name.
+    private static readonly string[] Lorepool = new[]
+    {
+        "Joseph the Eternal", "Saint Joseph of the Backseat", "Joseph McCelebrate",
+        "Joseph the Unyielding", "Big Joseph Energy", "Joseph the Blessed",
+        "Joseph of the Infinite Grin", "Joseph the Magnificent", "Joseph the Unbroken",
+        "Joseph the Everlasting", "Joseph the Radiant", "Joseph the Unstoppable",
+        "Joseph of the Sacred Chuckle", "Joseph the Divine", "Joseph the Memorable",
+        "Joseph the Unforgotten", "Joseph the Resplendent", "Joseph the Unbowed",
+        "Joseph of the Holy Giggle", "Joseph the Triumphant", "Joseph the Venerable",
+        "Joseph the Unshakeable", "Joseph the Gracious", "Joseph the Illustrious",
+        "Joseph of the Perpetual Nod", "Joseph the Stupendous", "Joseph the Peerless",
+        "Joseph the Unassailable", "Joseph the Righteous"
+    };
+    private static int _lorepoolIndex = 0;
+
+    private static string NextLoreName()
+    {
+        var idx = (_lorepoolIndex + new Random().Next(0, Lorepool.Length)) % Lorepool.Length;
+        _lorepoolIndex = (_lorepoolIndex + 1) % Lorepool.Length;
+        return Lorepool[idx];
+    }
+
+    private void ShowLibraryAudioPage(StackPanel page)
+    {
+        while (page.Children.Count > 2) page.Children.RemoveAt(2);
+        var sounds = Services.SoundLibrary!.GetAllSounds();
+        var content = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+
+        var importRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+        var importBtn = new Button { Content = "🔊 Import Sound", Style = (Style)FindResource("PrimaryButton"), FontSize = 12, Padding = new Thickness(14, 6, 14, 6), ToolTip = "Import a WAV, MP3, or WMA sound clip" };
+        importBtn.Click += (_, _) => ImportSoundClipToLibrary(page);
+        importRow.Children.Add(importBtn);
+        importRow.Children.Add(new TextBlock { Text = $"{sounds.Count} sound{(sounds.Count != 1 ? "s" : "")}", FontSize = 11, Foreground = (Brush)FindResource("TextMutedBrush"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) });
+        content.Children.Add(importRow);
+
+        if (sounds.Count == 0)
+        {
+            var empty = CreateCard(0);
+            empty.Child = new TextBlock { Text = "No sounds yet. Import WAV, MP3, or WMA clips to get started.", FontSize = 13, Foreground = (Brush)FindResource("TextSecondaryBrush"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16) };
+            content.Children.Add(empty);
+        }
+        else
+        {
+            var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            var list = new StackPanel();
+            foreach (var sound in sounds) list.Children.Add(BuildSoundCard(sound, page));
+            scroll.Content = list;
+            content.Children.Add(scroll);
+        }
+
+        page.Children.Add(content);
+        CrossFade(page);
+    }
+
+    private Border BuildSoundCard(SoundClip sound, StackPanel page)
+    {
+        var card = CreateCard(0);
+        card.Margin = new Thickness(0, 0, 0, 8);
+        card.Padding = new Thickness(12);
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var info = new StackPanel();
+        info.Children.Add(new TextBlock { Text = sound.DisplayName, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextPrimaryBrush") });
+        info.Children.Add(new TextBlock { Text = $"{sound.Extension.ToUpper()} • {FormatBytes(sound.FileSize)} • Played {sound.TimesPlayed:N0}×", FontSize = 10, Foreground = (Brush)FindResource("TextMutedBrush"), Margin = new Thickness(0, 2, 0, 0) });
+        Grid.SetColumn(info, 0);
+        grid.Children.Add(info);
+
+        var playBtn = new Button { Content = "▶", Style = (Style)FindResource("GhostButton"), FontSize = 14, Padding = new Thickness(8, 2, 8, 2), ToolTip = "Preview", Margin = new Thickness(6, 0, 0, 0) };
+        playBtn.Click += (_, _) => Services.Audio?.PlaySound(Services.Settings!.Current, null);
+        Grid.SetColumn(playBtn, 1);
+        grid.Children.Add(playBtn);
+
+        var delBtn = new Button { Content = "✕", Style = (Style)FindResource("GhostButton"), FontSize = 14, Padding = new Thickness(8, 2, 8, 2), Foreground = (Brush)FindResource("DangerBrush"), ToolTip = "Delete", Margin = new Thickness(6, 0, 0, 0) };
+        delBtn.Click += (_, _) =>
+        {
+            if (MessageBox.Show(this, $"Delete '{sound.DisplayName}'?", "Delete Sound", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                Services.SoundLibrary!.DeleteSound(sound);
+                ShowLibraryAudioPage(page);
+            }
+        };
+        Grid.SetColumn(delBtn, 2);
+        grid.Children.Add(delBtn);
+
+        card.Child = grid;
+        return card;
+    }
+
+    private void ImportSoundClipToLibrary(StackPanel page)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Import Sound Clip", Filter = "Audio files|*.wav;*.mp3;*.wma|All files|*.*", Multiselect = true };
+        if (dlg.ShowDialog(this) != true) return;
+        int imported = 0;
+        foreach (var file in dlg.FileNames)
+        {
+            var result = Services.SoundLibrary!.ImportSound(file);
+            if (result.Imported > 0) imported++;
+        }
+        ShowToast(imported > 0 ? $"Imported {imported} sound{(imported != 1 ? "s" : "")}" : "No sounds imported", imported > 0 ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("WarningBrush"));
+        if (imported > 0) ShowLibraryAudioPage(page);
     }
 
     private async Task UploadToCloudAsync()

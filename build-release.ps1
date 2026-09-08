@@ -62,7 +62,7 @@ if (Test-Path $updaterStage) { Remove-Item -LiteralPath $updaterStage -Recurse -
     "-p:InvariantGlobalization=false",
     "--verbosity", "minimal"
   )
-if ($SelfContained) { $updaterArgs += "--self-contained", "true" }
+if ($SelfContained) { $updaterArgs += "--self-contained", "true", "-p:EnableCompressionInSingleFile=true" }
 else { $updaterArgs += "--self-contained", "false" }
 
 & dotnet @updaterArgs

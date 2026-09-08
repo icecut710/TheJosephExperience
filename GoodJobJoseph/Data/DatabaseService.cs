@@ -64,7 +64,8 @@ public class DatabaseService : IDisposable
         var result = new List<CelebrationImage>();
         using var connection = GetConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT {ImageColumns} FROM celebration_images ORDER BY created_at DESC";
+        // Filter out soft-deleted items — they stay in the DB for sync but stay hidden from the UI.
+        cmd.CommandText = $"SELECT {ImageColumns} FROM celebration_images WHERE deleted_at IS NULL ORDER BY created_at DESC";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
