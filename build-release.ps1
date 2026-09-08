@@ -31,14 +31,13 @@ if (Test-Path $pubStage) { Remove-Item -LiteralPath $pubStage -Recurse -Force }
     "-o", $pubStage,
     "-p:PublishSingleFile=true",
     "-p:IncludeNativeLibrariesForSelfExtract=true",
-    "-p:EnableCompressionInSingleFile=true",
     "-p:DebugType=none",
     "-p:DebugSymbols=false",
     "-p:PublishTrimmed=false",
     "-p:InvariantGlobalization=false",
     "--verbosity", "minimal"
   )
-if ($SelfContained) { $pubArgs += "--self-contained", "true" }
+if ($SelfContained) { $pubArgs += "--self-contained", "true", "-p:EnableCompressionInSingleFile=true" }
 else { $pubArgs += "--self-contained", "false" }
 
 Write-Host "==> Publishing ($Configuration, $Runtime, self-contained=$SelfContained)..." -ForegroundColor Cyan
@@ -58,7 +57,6 @@ if (Test-Path $updaterStage) { Remove-Item -LiteralPath $updaterStage -Recurse -
     "-o", $updaterStage,
     "-p:PublishSingleFile=true",
     "-p:IncludeNativeLibrariesForSelfExtract=true",
-    "-p:EnableCompressionInSingleFile=true",
     "-p:DebugType=none",
     "-p:DebugSymbols=false",
     "-p:InvariantGlobalization=false",
