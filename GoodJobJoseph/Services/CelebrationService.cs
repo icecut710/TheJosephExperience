@@ -17,6 +17,7 @@ public class CelebrationService
     private readonly SoundLibraryService _soundLibrary;
     private readonly DatabaseService _db;
     private readonly TrayService? _tray;
+    private readonly System.Windows.Threading.Dispatcher _dispatcher;
     private string? _lastShownImageId;
     private Views.Overlay3DWindow? _overlay3d;
     private readonly object _overlay3dLock = new();
@@ -49,6 +50,8 @@ public class CelebrationService
         _soundLibrary = soundLibrary;
         _db = db;
         _tray = tray;
+        _dispatcher = System.Windows.Application.Current?.Dispatcher
+            ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
     }
 
     public bool Trigger(string triggerType, bool? lowDistractionOverride = null)
@@ -453,7 +456,14 @@ public class CelebrationService
 
             if (image.Is3DModel && overlaySettings.Prefer3DModel)
             {
-                ShowModel3D(image.FilePath, overlaySettings, image.Id, triggerType);
+                if (_dispatcher.CheckAccess())
+                {
+                    ShowModel3D(image.FilePath, overlaySettings, image.Id, triggerType);
+                }
+                else
+                {
+                    _dispatcher.Invoke(() => ShowModel3D(image.FilePath, overlaySettings, image.Id, triggerType));
+                }
                 _audio.PlaySound(settings, image);
                 _history?.AddEntry(image.Id, image.DisplayName, triggerType, true, overlaySettings.OverlayDurationMs);
                 CelebrationStarted?.Invoke(image.DisplayName);
@@ -462,11 +472,22 @@ public class CelebrationService
 
             try
             {
-                _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
+                if (_dispatcher.CheckAccess())
                 {
-                    _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
-                    _history?.AddEntry(image.Id, image.DisplayName, triggerType, false, overlaySettings.OverlayDurationMs);
-                }, image.Id);
+                    _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
+                    {
+                        _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
+                        _history?.AddEntry(image.Id, image.DisplayName, triggerType, false, overlaySettings.OverlayDurationMs);
+                    }, image.Id);
+                }
+                else
+                {
+                    _dispatcher.Invoke(() => _overlay.ShowOverlay(source, overlaySettings, resolved.ResolvedQuote, resolved, () =>
+                    {
+                        _library.RecordShown(image.Id, triggerType, overlaySettings.OverlayDurationMs);
+                        _history?.AddEntry(image.Id, image.DisplayName, triggerType, false, overlaySettings.OverlayDurationMs);
+                    }, image.Id));
+                }
                 RecordOverlaySuccess();
             }
             catch (Exception ex)
@@ -495,8 +516,8 @@ public class CelebrationService
             if (_queue.Count == 0) return;
             var (evt, cfg) = _queue.Dequeue();
             AppLog.Info($"Processing queued game event: {evt.Type} (remaining: {_queue.Count})");
-            // Re-enter TriggerGameEvent on a background thread so the current call stack unwinds first.
-            Task.Run(() => TriggerGameEvent(evt.SourceTag, cfg, evt));
+            // Dispatch to the UI thread so WPF overlay calls (Window.Show) succeed.
+            _dispatcher.BeginInvoke(new System.Action(() => TriggerGameEvent(evt.SourceTag, cfg, evt)));
         }
     }
 

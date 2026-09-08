@@ -1,4 +1,4 @@
-<Window x:Class="JosephExperience.Views.MainWindow"
+﻿<Window x:Class="JosephExperience.Views.MainWindow"
          xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
          Title="The Joseph Experience 2.0"
@@ -178,7 +178,7 @@
         <Border x:Name="StatusBar" Grid.Row="2"
                 Background="{StaticResource StatusBarGradientBrush}"
                 BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="0,1,0,0">
-            <Grid Margin="12,3,12,3">
+            <Grid Margin="12,4,12,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
@@ -198,80 +198,123 @@
                            FontSize="12" FontWeight="SemiBold"
                            Foreground="{StaticResource TextPrimaryBrush}"/>
 
-                <!-- Hotkey hint, fixed slot right after READY -->
+                <!-- Hotkey hint -->
                 <TextBlock Grid.Column="2" x:Name="StatusHotkey" Text="HOTKEYS  ·  F2"
                              FontSize="11.5" FontWeight="SemiBold"
                              Foreground="{StaticResource TextMutedBrush}"
                              Margin="14,0,0,0" VerticalAlignment="Center"
                              ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
-                <!-- Flexible spacer keeps the right cluster pinned right -->
+                <!-- Flexible spacer -->
                 <Border Grid.Column="3"/>
 
-                <!-- Cloud status dot + usage -->
-                <StackPanel Grid.Column="4" Orientation="Horizontal"
-                             VerticalAlignment="Center" Margin="8,0,0,0">
-                    <Ellipse x:Name="CloudDot" Width="7" Height="7"
-                             Fill="{StaticResource TextMutedBrush}" Margin="0,0,4,0"/>
-                    <TextBlock x:Name="StatusCloudUsage" Text="—"
-                               FontSize="11"
-                               MaxWidth="150"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-                </StackPanel>
+                <!-- Cloud status badge -->
+                <Border x:Name="StatusCloudBadge" Grid.Column="4"
+                        Background="{StaticResource SecondarySurfaceBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="8,3" Margin="8,0,0,0"
+                        VerticalAlignment="Center" Height="22"
+                        ToolTip="Cloud sync status — shared across all your devices">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="CloudDot" Width="7" Height="7"
+                                 Fill="{StaticResource TextMutedBrush}" Margin="0,0,5,0"
+                                 VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusCloudUsage" Text="—"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   MaxWidth="120"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
 
-                <!-- CS2 status: live pulsing dot + label -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal"
-                             VerticalAlignment="Center" Margin="14,0,0,0">
-                    <Ellipse x:Name="Cs2Dot" Width="8" Height="8"
-                             Fill="{StaticResource TextMutedBrush}" Margin="0,0,5,0"/>
-                    <TextBlock x:Name="StatusCs2" Text="CS2: Setup Required"
-                               FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}"
-                               VerticalAlignment="Center"
-                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-                </StackPanel>
+                <!-- CS2 status badge (hidden until game integration is enabled) -->
+                <Border x:Name="StatusCs2Badge" Grid.Column="5"
+                        Background="{StaticResource SecondarySurfaceBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="8,3" Margin="8,0,0,0"
+                        VerticalAlignment="Center" Height="22" Visibility="Collapsed"
+                        ToolTip="Counter-Strike 2 connection status">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="Cs2Dot" Width="7" Height="7"
+                                 Fill="{StaticResource TextMutedBrush}" Margin="0,0,5,0"
+                                 VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusCs2" Text="CS2: Off"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
 
-                <!-- MW2 status -->
-                <TextBlock Grid.Column="6" x:Name="StatusMw2" Text="MW2: Disconnected"
-                           FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}"
-                           Margin="16,0,0,0" VerticalAlignment="Center"
-                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                <!-- MW2 status badge (hidden until game integration is enabled) -->
+                <Border x:Name="StatusMw2Badge" Grid.Column="6"
+                        Background="{StaticResource SecondarySurfaceBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="8,3" Margin="8,0,0,0"
+                        VerticalAlignment="Center" Height="22" Visibility="Collapsed"
+                        ToolTip="Modern Warfare 2 connection status">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="Mw2Dot" Width="7" Height="7"
+                                 Fill="{StaticResource TextMutedBrush}" Margin="0,0,5,0"
+                                 VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusMw2" Text="MW2: Off"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
 
-                <!-- Audio + Sounds played + Celebrations + NADD price -->
+                <!-- Audio + Sounds + Celebrations cluster -->
                 <StackPanel Grid.Column="7" Orientation="Horizontal"
-                            VerticalAlignment="Center" Margin="16,0,0,0">
-                    <TextBlock x:Name="StatusAudio" Text="AUDIO  ·  OFF"
-                               FontSize="11.5" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               ToolTip="F8 to toggle"/>
+                            VerticalAlignment="Center" Margin="12,0,0,0">
 
-                    <TextBlock x:Name="StatusSoundsPlayed" Text="0"
-                               FontSize="11.5" FontWeight="SemiBold"
-                               Foreground="{StaticResource WarningBrush}"
-                               Margin="8,0,0,0" VerticalAlignment="Center"
-                               ToolTip="Sounds played today"/>
+                    <!-- Audio badge -->
+                    <Border x:Name="StatusAudioBadge"
+                            Background="{StaticResource SecondarySurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                            CornerRadius="10" Padding="8,3"
+                            VerticalAlignment="Center" Height="22"
+                            ToolTip="F8 to toggle celebration sounds">
+                        <TextBlock x:Name="StatusAudio" Text="🔊 OFF"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </Border>
 
-                    <TextBlock x:Name="StatusCelebrationsToday" Text="0 TODAY"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{StaticResource WarningBrush}"
-                               Margin="8,0,0,0" VerticalAlignment="Center"
-                               ToolTip="Celebrations triggered today"/>
+                    <!-- Sounds played badge -->
+                    <Border x:Name="StatusSoundsBadge"
+                            Background="{StaticResource WarningSoftBrush}"
+                            BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
+                            CornerRadius="10" Padding="8,3" Margin="6,0,0,0"
+                            VerticalAlignment="Center" Height="22"
+                            ToolTip="Sounds played today">
+                        <TextBlock x:Name="StatusSoundsPlayed" Text="♪ 0"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource WarningBrush}"/>
+                    </Border>
 
+                    <!-- Celebrations badge -->
+                    <Border x:Name="StatusCelebrationsBadge"
+                            Background="{StaticResource AccentSoftBrush}"
+                            BorderBrush="{StaticResource AccentDarkBrush}" BorderThickness="1"
+                            CornerRadius="10" Padding="8,3" Margin="6,0,0,0"
+                            VerticalAlignment="Center" Height="22"
+                            ToolTip="Celebrations triggered today">
+                        <TextBlock x:Name="StatusCelebrationsToday" Text="🎉 0"
+                                   FontSize="10.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}"/>
+                    </Border>
+
+                    <!-- NADD price badge -->
                     <Border x:Name="StatusNaddBadge"
-                            Background="{StaticResource SuccessSoftBrush}" Opacity="0.75"
-                            BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1" CornerRadius="4"
-                            Height="20"
-                            MaxWidth="86"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            ToolTip="Real NADD/SOL token price from GeckoTerminal"
-                            Margin="8,0,0,0">
+                            Background="{StaticResource SuccessSoftBrush}"
+                            BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1"
+                            CornerRadius="10" Padding="8,3" Margin="6,0,0,0"
+                            VerticalAlignment="Center" Height="22" MaxWidth="90"
+                            ToolTip="Real NADD/SOL token price from GeckoTerminal">
                         <TextBlock x:Name="StatusNaddPrice" Text="NADD: ..."
                                    FontSize="10.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource SuccessBrush}"
-                                   TextTrimming="CharacterEllipsis"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Margin="6,2,6,2"/>
+                                   TextTrimming="CharacterEllipsis"/>
                     </Border>
                 </StackPanel>
 
@@ -283,7 +326,6 @@
                            Margin="16,0,0,0"/>
             </Grid>
         </Border>
-
                 <!-- ===================== TOAST (transient F8 / status feedback) ===================== -->
         <Border x:Name="Toast" Grid.Row="1"
                 VerticalAlignment="Bottom" HorizontalAlignment="Right"

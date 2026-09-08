@@ -92,10 +92,13 @@ public partial class MainWindow : Window
 
     private void UpdateStatusBarVisibility()
     {
-        if (StatusNaddBadge is not null)
-            StatusNaddBadge.Visibility = ActualWidth < 720 ? Visibility.Collapsed : Visibility.Visible;
-        if (StatusAudio is not null)
-            StatusAudio.Visibility = ActualWidth < 640 ? Visibility.Collapsed : Visibility.Visible;
+        // At narrow widths, hide the rightmost badges to prevent overflow.
+        // Order of hiding: NADD → Celebrations → Sounds → Audio → Cloud.
+        if (FindName("StatusNaddBadge") is FrameworkElement nadd) nadd.Visibility = ActualWidth < 720 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusCelebrationsBadge") is FrameworkElement cel) cel.Visibility = ActualWidth < 680 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusSoundsBadge") is FrameworkElement snd) snd.Visibility = ActualWidth < 640 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusAudioBadge") is FrameworkElement aud) aud.Visibility = ActualWidth < 600 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusCloudBadge") is FrameworkElement cld) cld.Visibility = ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     internal void UpdateNaddPrice()
@@ -435,6 +438,13 @@ public partial class MainWindow : Window
         }
 
         StatusHotkey.Text = $"HOTKEYS  ·  {CurrentHotkeyText(settings)}";
+
+        // Game integration badges (CS2 / MW2) are hidden until the user enables them.
+        // This keeps the status bar clean for users who only use manual celebrations.
+        var gamesEnabled = settings.GameIntegrationEnabled;
+        if (FindName("StatusCs2Badge") is FrameworkElement cs2Badge) cs2Badge.Visibility = gamesEnabled ? Visibility.Visible : Visibility.Collapsed;
+        if (FindName("StatusMw2Badge") is FrameworkElement mw2Badge) mw2Badge.Visibility = gamesEnabled ? Visibility.Visible : Visibility.Collapsed;
+
         RefreshStatsDisplay();
         UpdateCs2Status();
 
@@ -455,7 +465,13 @@ public partial class MainWindow : Window
         NavStatusHotkey.Text = "HOTKEYS  ·  F2";
         NavStatusHotkey.ToolTip = "F2: Trigger a Joseph celebration\nF8: Toggle celebration sounds";
         StatusVersion.Text = "v2.0.2";
-        StatusAudio.Text = settings.PlaySound ? "AUDIO  ·  ON" : "AUDIO  ·  OFF";
+        // Audio badge: icon + state, colored by on/off
+        if (FindName("StatusAudioBadge") is Border audioBadge)
+        {
+            audioBadge.Background = settings.PlaySound ? (Brush)FindResource("SuccessSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush");
+        }
+        StatusAudio.Text = settings.PlaySound ? "🔊 ON" : "🔇 OFF";
+        StatusAudio.Foreground = settings.PlaySound ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush");
     }
 
     private System.Windows.Media.Animation.Storyboard? _cs2Pulse;
@@ -465,6 +481,10 @@ public partial class MainWindow : Window
         var settings = Services.Settings!.Current;
         var cs2 = Services.GameIntegration?.Invoke();
         var phase = cs2?.State.Phase ?? CounterStrikeConnectionPhase.Disabled;
+
+        // Badge is only visible when game integration is enabled.
+        if (FindName("StatusCs2Badge") is FrameworkElement cs2Badge)
+            cs2Badge.Visibility = settings.GameIntegrationEnabled ? Visibility.Visible : Visibility.Collapsed;
 
         string text;
         Brush dot, label;
@@ -557,9 +577,18 @@ public partial class MainWindow : Window
 
     private void UpdateMw2Status()
     {
+        var settings = Services.Settings!.Current;
+
+        // Badge is only visible when game integration is enabled.
+        if (FindName("StatusMw2Badge") is FrameworkElement mw2Badge)
+            mw2Badge.Visibility = settings.GameIntegrationEnabled ? Visibility.Visible : Visibility.Collapsed;
+
         var mw2Providers = Services.GameProviders?.Invoke() ?? Array.Empty<IGameIntegrationProvider?>();
         var mw2 = mw2Providers.FirstOrDefault(p => p?.GameId == "mw2");
         var state = mw2?.State ?? "Not initialized";
+
+        Brush mw2Color = state == "Running" ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush");
+        if (FindName("Mw2Dot") is System.Windows.Shapes.Ellipse mw2Dot) mw2Dot.Fill = mw2Color;
 
         if (state == "Running")
         {
@@ -568,7 +597,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            StatusMw2.Text = "MW2: Disconnected";
+            StatusMw2.Text = "MW2: Off";
             StatusMw2.Foreground = (Brush)FindResource("TextMutedBrush");
         }
         NavStatusMw2.Text = StatusMw2.Text;
@@ -689,17 +718,17 @@ public partial class MainWindow : Window
             StatusNaddPrice.Opacity = stats.NaddPrice != null ? 1.0 : 0.4;
 
             // Sounds played
-            StatusSoundsPlayed.Text = stats.SoundsPlayed.ToString("N0");
+            StatusSoundsPlayed.Text = $"♪ {stats.SoundsPlayed:N0}";
 
             // Celebrations today
-            StatusCelebrationsToday.Text = stats.CelebrationsToday > 0 ? $"{stats.CelebrationsToday} TODAY" : "0 TODAY";
+            StatusCelebrationsToday.Text = stats.CelebrationsToday > 0 ? $"🎉 {stats.CelebrationsToday}" : "🎉 0";
         }
         catch
         {
             StatusNaddPrice.Text = "NADD: --";
             StatusNaddPrice.Opacity = 0.4;
-            StatusSoundsPlayed.Text = "?";
-            StatusCelebrationsToday.Text = "0 TODAY";
+            StatusSoundsPlayed.Text = "♪ 0";
+            StatusCelebrationsToday.Text = "🎉 0";
         }
     }
 
