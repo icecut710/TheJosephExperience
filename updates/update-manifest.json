@@ -3,11 +3,11 @@
     "minimumSupportedVersion":  "2.0.0",
     "version":  "2.0.3",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-08T11:24:54.0077862Z",
+    "releaseDateUtc":  "2026-09-08T19:28:24.6705495Z",
     "releaseType":  "release",
-    "sha256":  "3561c3e13fde72525c7184a0db7ee557a1f544ed58803918e6835cf9e5a37ce1",
+    "sha256":  "b6b43162590f8440a9f958ccd37d090b9428cc427fd20f26f2f9bc090457322f",
     "releaseNotes":  [
                          "Fix overlay not showing for CS2 game events (threading fix); overlay calls now marshal to UI thread; fix build-release.ps1 compression flag for self-contained builds"
                      ],
-    "fileSize":  2434458
+    "fileSize":  98035227
 }
