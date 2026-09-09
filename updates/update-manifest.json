@@ -1,13 +1,23 @@
 ﻿{
-    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.0.3/TheJosephExperience-v2.0.3-win-x64.zip",
-    "minimumSupportedVersion":  "2.0.0",
-    "version":  "2.0.3",
+    "version":  "2.1.0",
+    "minimumSupportedVersion":  "2.0.3",
+    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.0/TheJosephExperience-v2.1.0-win-x64.zip",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-08T19:28:24.6705495Z",
+    "releaseDateUtc":  "2026-09-09T01:11:05.2377105Z",
     "releaseType":  "release",
-    "sha256":  "b6b43162590f8440a9f958ccd37d090b9428cc427fd20f26f2f9bc090457322f",
+    "sha256":  "036971697286c67eba9a82a6b12ac5d9d99ffb3efdc9669fb7a1f4edfb271e0e",
+    "fileSize":  98718532,
     "releaseNotes":  [
-                         "Fix overlay not showing for CS2 game events (threading fix); overlay calls now marshal to UI thread; fix build-release.ps1 compression flag for self-contained builds"
-                     ],
-    "fileSize":  98035227
+                         "Fix overlay not showing for CS2 game events (threading fix; overlay calls now marshal to UI thread)",
+                         "Regenerate auth tokens on config install with fresh random tokens",
+                         "Restart CS2 button now properly restarts the game (kills cs2 process first)",
+                         "New Library audio page with separate sound clip management",
+                         "Context menus with Enable/Disable/Delete on library images and sounds",
+                         "Multi-select event chips for game integrations",
+                         "Generate new config button with fresh auth tokens",
+                         "Auth tokens hidden from UI view",
+                         "Lore pool auto-naming for imported sounds",
+                         "Animated status bar pill badges",
+                         "Hover-lift animations on stat tiles and filter chips"
+                     ]
 }
