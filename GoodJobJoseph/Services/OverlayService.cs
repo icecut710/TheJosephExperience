@@ -14,10 +14,16 @@ public class OverlayService
     private readonly ConcurrentDictionary<string, Rect> _transparentBoundsCache = new();
 
     /// <summary>True while an overlay window is on screen.</summary>
-    public bool IsVisible => _overlay?.IsOverlayVisible ?? false;
+    public bool IsVisible => _overlay is not null && (_overlay.Dispatcher.CheckAccess()
+        ? _overlay.IsOverlayVisible : _overlay.Dispatcher.Invoke(() => _overlay.IsOverlayVisible));
 
     /// <summary>Immediately hides the current overlay (priority preemption).</summary>
-    public void HideOverlay() => _overlay?.ForceHide();
+    public void HideOverlay()
+    {
+        if (_overlay is null) return;
+        if (_overlay.Dispatcher.CheckAccess()) _overlay.ForceHide();
+        else _overlay.Dispatcher.Invoke(_overlay.ForceHide);
+    }
     private readonly object _lock = new();
     private bool _showing;
 

@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>JosephExperience</AssemblyName>
     <RootNamespace>JosephExperience</RootNamespace>
-    <Version>2.0.3</Version>
+    <Version>2.0.5</Version>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
@@ -26,6 +26,7 @@
   <ItemGroup>
     <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" Exclude="Assets\AppIcon.ico" />
     <Content Include=".env.example" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="cloud-config.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

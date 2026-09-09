@@ -41,7 +41,7 @@ var roundJson = round.HasValue
           "player": {
             "steamid": "{{{steamId}}}",
             "team": "{{{team}}}",
-            "activity": { "living": "{{{(alive ? "alive" : "dead")}}}" },
+            "activity": "playing",
             "state": { "health": {{{(alive ? 100 : 0)}}} },
             "match_stats": { "kills": {{{kills ?? 0}}}, "mvps": {{{mvp}}} }
           }{{{bombJson}}}
@@ -201,6 +201,17 @@ var roundJson = round.HasValue
     }
 
     [Fact]
+    public void ValveShapedActivityString_ParsesKillsHealthAndMvps()
+    {
+        var snapshot = Parser.Parse(Payload(kills: 9, alive: false, mvp: 2));
+        Assert.NotNull(snapshot);
+        Assert.Equal(9, snapshot.LocalKills);
+        Assert.Equal(0, snapshot.LocalHealth);
+        Assert.False(snapshot.LocalAlive);
+        Assert.Equal(2, snapshot.LocalMvp);
+    }
+
+    [Fact]
     public void ConfigBuild_ContainsEndpointAndDataSections()
     {
         var mgr = new GsiConfigManager();
@@ -253,7 +264,9 @@ var roundJson = round.HasValue
         Directory.CreateDirectory(tmpDir);
         try
         {
-            var result = mgr.InstallOrUpdate(tmpDir, 3000, "tok");
+            var cfgDir = Path.Combine(tmpDir, "cfg");
+            Directory.CreateDirectory(cfgDir);
+            var result = mgr.InstallOrUpdate(cfgDir, 3000, "tok");
             Assert.True(result.Success);
             Assert.NotNull(result.CfgFolder);
             var cfgPath = Path.Combine(result.CfgFolder!, mgr.ConfigFileName);

@@ -60,13 +60,13 @@ public sealed class GsiConfigManager : IGsiConfigManager
             var manual = manualOverridePath.Trim();
             var candidates = new[]
             {
-                manual,
                 Path.Combine(manual, "game", "csgo", "cfg"),
                 Path.Combine(manual, "csgo", "cfg"),
-                Path.Combine(manual, "cfg")
+                Path.Combine(manual, "cfg"),
+                manual
             };
             foreach (var c in candidates)
-                if (Directory.Exists(c) && CanWrite(c)) return Path.GetFullPath(c);
+                if (Directory.Exists(c) && Path.GetFileName(Path.TrimEndingDirectorySeparator(c)).Equals("cfg", StringComparison.OrdinalIgnoreCase)) return Path.GetFullPath(c);
             return null;
         }
 
@@ -171,9 +171,13 @@ public sealed class GsiConfigManager : IGsiConfigManager
         sb.AppendLine("    \"timeout\"       \"5.0\"");
         sb.AppendLine("    \"buffer\"        \"0.1\"");
         sb.AppendLine("    \"throttle\"      \"0.5\"");
-        sb.AppendLine("    \"heartbeat\"     \"30.0\"");
+        sb.AppendLine("    \"heartbeat\"     \"5.0\"");
         if (!string.IsNullOrEmpty(authToken))
-            sb.AppendLine($"    \"auth\"          \"{authToken}\"");
+        {
+            if (authToken.IndexOfAny(new[] { '"', '\r', '\n', '\\' }) >= 0)
+                throw new ArgumentException("Auth token contains invalid config characters.", nameof(authToken));
+            sb.AppendLine("    \"auth\" { \"token\" \"" + authToken + "\" }");
+        }
         sb.AppendLine("    \"data\"");
         sb.AppendLine("    {");
         sb.AppendLine("        \"provider\"               \"1\"");
@@ -352,12 +356,7 @@ public sealed class GsiConfigManager : IGsiConfigManager
                      || fileName.StartsWith("gamestate_integration_goodjobjoseph", StringComparison.OrdinalIgnoreCase)
                      || fileName.Equals("gamestate_integration_goodjob.cfg", StringComparison.OrdinalIgnoreCase)
                      || fileName.Equals("gamestate_integration_gjj.cfg", StringComparison.OrdinalIgnoreCase)
-                     || fileName.Equals("gamestate_integration_joseph.cfg", StringComparison.OrdinalIgnoreCase)
-                     || content.Contains("goodjob")
-                     || content.Contains("good_job_joseph")
-                     || content.Contains("GoodJobJoseph")
-                     || content.Contains("JosephExperience")
-                    || (content.Contains("127.0.0.1") && content.Contains($"http://127.0.0.1:{canonicalPort}/"));
+                     || fileName.Equals("gamestate_integration_joseph.cfg", StringComparison.OrdinalIgnoreCase);
 
                 if (isOwned)
                     ownedFiles.Add(file);

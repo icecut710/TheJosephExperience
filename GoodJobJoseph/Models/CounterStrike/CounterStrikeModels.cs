@@ -154,17 +154,24 @@ public sealed record GsiSnapshot
             if (player.TryGetProperty("steamid", out var sid)) steamId = sid.GetString();
             if (player.TryGetProperty("name", out var pn)) localName = pn.GetString();
             if (player.TryGetProperty("team", out var t)) localTeam = t.GetString();
+            // Valve sends player.activity as a string (for example "playing").
+            // Accept the older object shape too, without querying properties on a string.
             if (player.TryGetProperty("activity", out var act) &&
+                act.ValueKind == JsonValueKind.Object &&
                 act.TryGetProperty("living", out var living))
                 localAlive = string.Equals(living.GetString(), "alive", StringComparison.OrdinalIgnoreCase);
             if (player.TryGetProperty("state", out var st) &&
                 st.TryGetProperty("health", out var h) && h.TryGetInt32(out var hv))
+            {
                 localHealth = hv;
+                localAlive = hv > 0;
+            }
             if (player.TryGetProperty("match_stats", out var ms))
             {
                 if (ms.TryGetProperty("kills", out var k) && k.TryGetInt32(out var kv)) localKills = kv;
                 if (ms.TryGetProperty("deaths", out var d) && d.TryGetInt32(out var dv)) localDeaths = dv;
-                if (ms.TryGetProperty("mvp", out var m) && m.TryGetInt32(out var mv)) localMvp = mv;
+                if (ms.TryGetProperty("mvps", out var mvps) && mvps.TryGetInt32(out var mv)) localMvp = mv;
+                else if (ms.TryGetProperty("mvp", out var mvp) && mvp.TryGetInt32(out mv)) localMvp = mv;
             }
         }
 

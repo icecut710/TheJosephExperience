@@ -65,13 +65,14 @@ public static class CelebrationResolver
         };
         imgScale = Math.Clamp(imgScale, 0.25, 3.0);
 
-        var txtScale = intensity switch
+        var txtScale = settings.TextScale * (intensity switch
         {
             FxIntensity.Subtle => 0.8,
             FxIntensity.Strong => 1.2,
             FxIntensity.Unhinged => 1.5,
             _ => 1.0
-        };
+        });
+        txtScale = Math.Clamp(txtScale, 0.5, 3.0);
 
         // Apply preset-derived intensity modifier.
         var effectiveIntensity = ApplyIntensityModifier(intensity, intensityMod);

@@ -92,13 +92,12 @@ public partial class MainWindow : Window
 
     private void UpdateStatusBarVisibility()
     {
-        // At narrow widths, hide the rightmost badges to prevent overflow.
-        // Order of hiding: NADD → Celebrations → Sounds → Audio → Cloud.
-        if (FindName("StatusNaddBadge") is FrameworkElement nadd) nadd.Visibility = ActualWidth < 720 ? Visibility.Collapsed : Visibility.Visible;
-        if (FindName("StatusCelebrationsBadge") is FrameworkElement cel) cel.Visibility = ActualWidth < 680 ? Visibility.Collapsed : Visibility.Visible;
-        if (FindName("StatusSoundsBadge") is FrameworkElement snd) snd.Visibility = ActualWidth < 640 ? Visibility.Collapsed : Visibility.Visible;
-        if (FindName("StatusAudioBadge") is FrameworkElement aud) aud.Visibility = ActualWidth < 600 ? Visibility.Collapsed : Visibility.Visible;
-        if (FindName("StatusCloudBadge") is FrameworkElement cld) cld.Visibility = ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
+        // Hide secondary badges before the status row can clip at supported widths.
+        if (FindName("StatusNaddBadge") is FrameworkElement nadd) nadd.Visibility = ActualWidth < 1040 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusCelebrationsBadge") is FrameworkElement cel) cel.Visibility = ActualWidth < 940 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusSoundsBadge") is FrameworkElement snd) snd.Visibility = ActualWidth < 880 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusAudioBadge") is FrameworkElement aud) aud.Visibility = ActualWidth < 820 ? Visibility.Collapsed : Visibility.Visible;
+        if (FindName("StatusCloudBadge") is FrameworkElement cld) cld.Visibility = ActualWidth < 760 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     internal void UpdateNaddPrice()
@@ -124,6 +123,12 @@ public partial class MainWindow : Window
     {
         ShowCelebrationView();
         UpdateStatusBar();
+    }
+
+    internal void OnCs2StateChanged()
+    {
+        UpdateStatusBar();
+        if (_currentPageTag == "Games") RefreshGamesView();
     }
 
     internal void ShowHotkeyError(string message, Models.HotkeyBinding? binding = null)
@@ -462,9 +467,11 @@ public partial class MainWindow : Window
         UpdateMw2Status();
         NavStatusAudio.Text = settings.PlaySound ? "Audio: On" : "Audio: Off";
         NavStatusAudio.ToolTip = StatusAudio.Text;
-        NavStatusHotkey.Text = "HOTKEYS  ·  F2";
-        NavStatusHotkey.ToolTip = "F2: Trigger a Joseph celebration\nF8: Toggle celebration sounds";
-        StatusVersion.Text = "v2.0.2";
+        var celebrationHotkey = settings.GetBinding(HotkeyAction.Celebration).DisplayName;
+        var audioHotkey = settings.GetBinding(HotkeyAction.AudioToggle).DisplayName;
+        NavStatusHotkey.Text = $"Celebrate: {celebrationHotkey}";
+        NavStatusHotkey.ToolTip = $"{celebrationHotkey}: Trigger a Joseph celebration\n{audioHotkey}: Toggle celebration sounds";
+        StatusVersion.Text = $"v{CurrentVersionService.GetString()}";
         // Audio badge: icon + state, colored by on/off
         if (FindName("StatusAudioBadge") is Border audioBadge)
         {
@@ -1357,10 +1364,43 @@ public partial class MainWindow : Window
             });
         }
 
+        eventsContent.Children.Add(new TextBlock
+        {
+            Text = "Active events — choose any combination",
+            FontSize = 10.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            Margin = new Thickness(0, 2, 0, 5)
+        });
+        var enabledEvents = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
+        foreach (var selectablePreset in GameEventPresets)
+        {
+            var eventToggle = new CheckBox
+            {
+                Content = selectablePreset.Name,
+                IsChecked = selectablePreset.EnabledGet(settings),
+                Margin = new Thickness(0, 0, 14, 7),
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = selectablePreset.Description
+            };
+            eventToggle.Checked += (_, _) =>
+            {
+                selectablePreset.EnabledSet(settings, true);
+                Services.Settings.Save();
+            };
+            eventToggle.Unchecked += (_, _) =>
+            {
+                selectablePreset.EnabledSet(settings, false);
+                Services.Settings.Save();
+            };
+            enabledEvents.Children.Add(eventToggle);
+        }
+        eventsContent.Children.Add(enabledEvents);
+
         var eventPickerRow = new Grid { Margin = new Thickness(0, 2, 0, 6) };
         eventPickerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
         eventPickerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        eventPickerRow.Children.Add(CreateFieldLabel("Event"));
+        eventPickerRow.Children.Add(CreateFieldLabel("Edit event"));
         var eventPicker = new ComboBox();
         foreach (var p in GameEventPresets)
         {
@@ -1417,13 +1457,6 @@ public partial class MainWindow : Window
             eventEditorHost.Children.Clear();
             var preset = GameEventPresets[_selectedGameEventIndex];
             if (currentCfg is null) return;
-
-            eventEditorHost.Children.Add(CreateToggleRow("Celebrate this event", preset.EnabledGet(settings), v =>
-            {
-                preset.EnabledSet(settings, v);
-                Services.Settings.Save();
-                RefreshGamesView();
-            }, 160));
 
             var sources = new[]
             {
@@ -1624,80 +1657,6 @@ public partial class MainWindow : Window
         panel.Children.Add(feelCard);
 
         // =====================================================================
-        // TEST THE PIPELINE CARD
-        // =====================================================================
-        var testCard = CreateCard(1);
-        var testContent = new StackPanel();
-        testContent.Children.Add(CreateSectionHeader("TEST THE PIPELINE"));
-        testContent.Children.Add(new TextBlock
-        {
-            Text = $"Fire a sample event through the real celebration pipeline \u2014 a quick way to verify your setup without touching {(selectedGame == "cs2" ? "CS2" : "HL2")}.",
-            FontSize = 10.5,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextMutedBrush"),
-            Margin = new Thickness(0, 0, 0, 6)
-        });
-
-        var testGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-        for (var c = 0; c < 3; c++) testGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var testRowIndex = 0;
-
-        void AddTest(string label, GameEventType type)
-        {
-            var btn = new Button
-            {
-                Content = "Test " + label,
-                Style = (Style)FindResource("GhostButton"),
-                FontSize = 11,
-                Padding = new Thickness(8, 3, 8, 3),
-                Height = 26,
-                Margin = new Thickness(2, 2, 2, 2),
-                ToolTip = $"Fires a TEST {label} through the real celebration pipeline"
-            };
-            btn.Click += (_, _) =>
-            {
-                if (selectedGame == "cs2")
-                {
-                    var svc = Services.GameIntegration?.Invoke();
-                    if (svc is null) { MessageBox.Show("Game integration is not running.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-                    svc.TriggerTestEvent(type);
-                }
-                else if (selectedGame == "hl2")
-                {
-                    var hl2Prov = providers.FirstOrDefault(p => p?.GameId == "hl2");
-                    if (hl2Prov is null) { MessageBox.Show("HL2 provider not available.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-                    if (!hl2Prov.CanTest) { MessageBox.Show("This game does not support test events.", "Test", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-                    if (hl2Prov.TriggerTestEvent())
-                    {
-                        _gamesFeedSignature = null;
-                        UpdateGamesFeed(null, EventArgs.Empty);
-                    }
-                }
-            };
-            var col = testRowIndex % 3;
-            var row = testRowIndex / 3;
-            Grid.SetColumn(btn, col);
-            Grid.SetRow(btn, row);
-            if (testGrid.RowDefinitions.Count <= row) testGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            testGrid.Children.Add(btn);
-            testRowIndex++;
-        }
-
-        AddTest("Kill", GameEventType.Kill);
-        AddTest("Double Kill", GameEventType.DoubleKill);
-        AddTest("Triple Kill", GameEventType.TripleKill);
-        AddTest("Ace", GameEventType.Ace);
-        AddTest("Round Win", GameEventType.RoundWin);
-        AddTest("Match Win", GameEventType.MatchWin);
-        AddTest("Bomb Plant", GameEventType.BombPlanted);
-        AddTest("Bomb Defuse", GameEventType.BombDefused);
-        AddTest("Death", GameEventType.Death);
-
-        testContent.Children.Add(testGrid);
-        testCard.Child = testContent;
-        panel.Children.Add(testCard);
-
-        // =====================================================================
         // RECENT EVENTS — live diagnostics feed
         // =====================================================================
         var feedCard = CreateCard(1);
@@ -1729,7 +1688,7 @@ public partial class MainWindow : Window
         });
         infoContent.Children.Add(new TextBlock
         {
-            Text = "CS2's Game-State Integration posts JSON to a localhost listener on the port above \u2014 no injection, no memory access, no hooks. State transitions are turned into celebrations through the normal Joseph pipeline.\n\nHalf-Life 2 is detected via process scan and incremental log parsing of hl2.log / console.log with the -condebug launch option \u2014 also external-only, no injection or hooks.\n\nMW2 (2009) is detected via process scan and incremental log parsing of iw5.log \u2014 also external-only, no injection or hooks.\n\nUse the Active game selector above to toggle between CS2 and HL2 status. Game event celebrations, feel tuning, and test buttons apply across all games.\n\nEvery event has its own Celebration and Text dropdowns on the Event Celebrations card, and every choice saves instantly.",
+            Text = "CS2's Game-State Integration posts JSON to a localhost listener on the port above \u2014 no injection, no memory access, no hooks. State transitions are turned into celebrations through the normal Joseph pipeline.\n\nHalf-Life 2 is detected via process scan and incremental log parsing of hl2.log / console.log with the -condebug launch option \u2014 also external-only, no injection or hooks.\n\nMW2 (2009) is detected via process scan and incremental log parsing of iw5.log \u2014 also external-only, no injection or hooks.\n\nUse the Active game selector above to view each game's status. Event selection and feel tuning apply across all games.\n\nChoose any combination of active events, then use Edit event to set each event's Celebration and Text options. Every choice saves instantly.",
             FontSize = 11.5,
             TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)FindResource("TextSecondaryBrush"),
@@ -1893,7 +1852,7 @@ public partial class MainWindow : Window
         tiles.Children.Add(CreateStatTile("FRESHNESS", freshness switch
         {
             PayloadFreshness.Receiving => "Live \u00b7 now",
-            PayloadFreshness.Idle => "Paused \u00b7 <3s",
+            PayloadFreshness.Idle => "Paused \u00b7 3\u201310s",
             PayloadFreshness.Stale => "Stale \u00b7 >10s",
             _ => "No payload yet"
         }, freshness == PayloadFreshness.Receiving ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("WarningBrush")));
@@ -1911,7 +1870,7 @@ public partial class MainWindow : Window
             RefreshGamesView();
         }));
 
-        content.Children.Add(CreateComboRow("GSI Port", new[] { "3000", "3001", "3002", "3500", "4000", "8080" }, settings.GameIntegrationPort.ToString(), v =>
+        content.Children.Add(CreateComboRow("GSI Port", new[] { "3000" }, settings.GameIntegrationPort.ToString(), v =>
         {
             if (int.TryParse(v, out var parsed) && parsed >= 1 && parsed <= 65535 && parsed != settings.GameIntegrationPort)
             {
@@ -2525,6 +2484,10 @@ public partial class MainWindow : Window
 
     private void ShowLibraryImagesPage(StackPanel page)
     {
+        // Keep exactly one tab body mounted. Without this, returning from Audio
+        // left the audio controls visible underneath the Images page.
+        while (page.Children.Count > 2) page.Children.RemoveAt(2);
+        _chips.Clear();
         var images = Services.Library!.GetAllImages();
 
         var root = new Grid { Margin = new Thickness(0, 0, 0, 0) };
@@ -2549,7 +2512,8 @@ public partial class MainWindow : Window
             Padding = new Thickness(12, 4, 12, 4),
             Height = 28,
             Margin = new Thickness(0, 0, 6, 0),
-            ToolTip = "Upload an image to the shared cloud library"
+            IsEnabled = Services.Supabase.Config.CanUpload,
+            ToolTip = "Upload this image to the shared cloud Library"
         };
         uploadBtn.Click += async (_, _) => await UploadToCloudAsync();
         Grid.SetColumn(uploadBtn, 1);
@@ -2867,9 +2831,17 @@ public partial class MainWindow : Window
 
         // Bottom status + sync
         var bottom = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var cloud = Services.Supabase;
+        var cloudStatus = cloud is null || !cloud.Config.IsConfigured
+            ? "Cloud not configured"
+            : cloud.State == SupabaseState.Syncing
+                ? "Cloud syncing…"
+                : cloud.LastSuccessUtc.HasValue
+                    ? $"Cloud synced {cloud.LastSuccessUtc.Value.ToLocalTime():h:mm tt}"
+                    : "Cloud ready to sync";
         var statusText = new TextBlock
         {
-            Text = $"{all.Count} Joseph{(all.Count == 1 ? "" : "s")}",
+            Text = $"{all.Count} Joseph{(all.Count == 1 ? "" : "s")}  ·  {cloudStatus}",
             FontSize = 10.5,
             Foreground = (Brush)FindResource("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center
@@ -2878,14 +2850,19 @@ public partial class MainWindow : Window
         bottom.Children.Add(statusText);
         var syncBtn = new Button
         {
-            Content = "Sync",
-            Style = (Style)FindResource("GhostButton"),
-            FontSize = 10.5,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"),
-            Padding = new Thickness(8, 3, 8, 3),
-            ToolTip = "Sync Josephs"
+            Content = cloud?.State == SupabaseState.Syncing ? "Syncing…" : "↻  Sync Library",
+            Style = (Style)FindResource("PrimaryButton"),
+            FontSize = 11,
+            Padding = new Thickness(12, 4, 12, 4),
+            IsEnabled = cloud is not null && cloud.Config.IsConfigured && cloud.State != SupabaseState.Syncing,
+            ToolTip = "Download and verify the latest cloud Library"
         };
-        syncBtn.Click += async (_, _) => await _app.SyncNowAsync(() => ShowLibraryView());
+        syncBtn.Click += async (_, _) =>
+        {
+            syncBtn.IsEnabled = false;
+            syncBtn.Content = "Syncing…";
+            await _app.SyncNowAsync(() => ShowLibraryView());
+        };
         DockPanel.SetDock(syncBtn, Dock.Right);
         bottom.Children.Add(syncBtn);
         host.Children.Add(bottom);
@@ -2999,7 +2976,20 @@ public partial class MainWindow : Window
         };
 
         var menu = new ContextMenu();
-        var celebrate = new MenuItem { Header = "Celebrate" };
+        static TextBlock MenuGlyph(string glyph, Brush color) => new()
+        {
+            Text = glyph,
+            Foreground = color,
+            FontSize = 14,
+            Width = 22,
+            TextAlignment = System.Windows.TextAlignment.Center
+        };
+
+        var celebrate = new MenuItem
+        {
+            Header = "Celebrate now",
+            Icon = MenuGlyph("▶", (Brush)FindResource("AccentBrush"))
+        };
         celebrate.Click += (_, _) =>
         {
             var oldMode = Services.Settings!.Current.ImageMode;
@@ -3011,23 +3001,42 @@ public partial class MainWindow : Window
             Services.Settings.Current.SpecificImageId = oldSpec;
             Services.Settings.Save();
         };
-        var fav = new MenuItem { Header = image.Favorite ? "Unfavorite" : "Favorite" };
+        var fav = new MenuItem
+        {
+            Header = image.Favorite ? "Remove from favorites" : "Add to favorites",
+            Icon = MenuGlyph(image.Favorite ? "★" : "☆", (Brush)FindResource("WarningBrush"))
+        };
         fav.Click += (_, _) =>
         {
             image.Favorite = !image.Favorite;
             Services.Library!.UpdateImage(image);
             onChanged();
         };
-        var enable = new MenuItem { Header = image.Enabled ? "Disable" : "Enable" };
+        var enable = new MenuItem
+        {
+            Header = image.Enabled ? "Disable celebrations" : "Enable celebrations",
+            Icon = MenuGlyph(image.Enabled ? "●" : "○", image.Enabled
+                ? (Brush)FindResource("SuccessBrush")
+                : (Brush)FindResource("TextMutedBrush"))
+        };
         enable.Click += (_, _) =>
         {
             image.Enabled = !image.Enabled;
             Services.Library!.UpdateImage(image);
             onChanged();
         };
-        var details = new MenuItem { Header = "Details..." };
+        var details = new MenuItem
+        {
+            Header = "View details…",
+            Icon = MenuGlyph("ⓘ", (Brush)FindResource("TextSecondaryBrush"))
+        };
         details.Click += (_, _) => OpenImageDetails(image, onChanged);
-        var del = new MenuItem { Header = "Delete" };
+        var del = new MenuItem
+        {
+            Header = "Delete from Library",
+            Icon = MenuGlyph("✕", (Brush)FindResource("DangerBrush")),
+            Foreground = (Brush)FindResource("DangerBrush")
+        };
         del.Click += (_, _) =>
         {
             var confirm = MessageBox.Show(this,
@@ -3677,17 +3686,20 @@ private StackPanel BuildSettingsOverlay()
             Foreground = (Brush)FindResource("TextSecondaryBrush"),
             Margin = new Thickness(0, 0, 0, 6)
         });
-        panel.Children.Add(CreatePositionPicker(settings, _ => { }));
-        panel.Children.Add(CreateSliderRow("Custom X", 0.0, 1.0, settings.CustomPositionX, v =>
+        panel.Children.Add(CreatePositionPicker(settings, _ => RefreshSettingsPage()));
+        if (settings.ImagePosition == ImagePosition.Custom)
         {
-            settings.CustomPositionX = Math.Clamp(v, 0.0, 1.0);
-            Services.Settings.Save();
-        }, 100, 6));
-        panel.Children.Add(CreateSliderRow("Custom Y", 0.0, 1.0, settings.CustomPositionY, v =>
-        {
-            settings.CustomPositionY = Math.Clamp(v, 0.0, 1.0);
-            Services.Settings.Save();
-        }, 100, 6));
+            panel.Children.Add(CreateSliderRow("Custom X", 0.0, 1.0, settings.CustomPositionX, v =>
+            {
+                settings.CustomPositionX = Math.Clamp(v, 0.0, 1.0);
+                Services.Settings.Save();
+            }, 100, 6, v => $"{v:P0}"));
+            panel.Children.Add(CreateSliderRow("Custom Y", 0.0, 1.0, settings.CustomPositionY, v =>
+            {
+                settings.CustomPositionY = Math.Clamp(v, 0.0, 1.0);
+                Services.Settings.Save();
+            }, 100, 6, v => $"{v:P0}"));
+        }
 
         // Monitor group
         panel.Children.Add(CreateSectionHeader("MONITOR"));
@@ -3700,15 +3712,19 @@ private StackPanel BuildSettingsOverlay()
         {
             settings.FitMode = v;
             Services.Settings.Save();
+            RefreshSettingsPage();
         }, 140));
+        if (settings.FitMode == FitMode.CustomSize)
+        {
+            panel.Children.Add(CreateSliderRow("Custom fit size", 0.25, 3.0, settings.CustomFitScale, v =>
+            {
+                settings.CustomFitScale = Math.Round(v, 2);
+                Services.Settings.Save();
+            }, 140, 4, v => $"{v * 100:0}%"));
+        }
 
         // Appearance group
         panel.Children.Add(CreateSectionHeader("APPEARANCE"));
-        panel.Children.Add(CreateToggleRow("Lock aspect ratio", settings.LockAspectRatio, v =>
-        {
-            settings.LockAspectRatio = v;
-            Services.Settings.Save();
-        }));
         panel.Children.Add(CreateSliderRow("Joseph opacity", 0.25, 1.0, settings.ImageOpacity, v =>
         {
             settings.ImageOpacity = Math.Clamp(v, 0.25, 1.0);
@@ -3718,6 +3734,7 @@ private StackPanel BuildSettingsOverlay()
         {
             settings.SizePreset = v;
             Services.Settings.Save();
+            RefreshSettingsPage();
         }, 140));
         if (settings.SizePreset == SizePreset.Custom)
         {
@@ -3732,6 +3749,7 @@ private StackPanel BuildSettingsOverlay()
         {
             settings.SafeMarginPreset = v;
             Services.Settings.Save();
+            RefreshSettingsPage();
         }, 140));
         if (settings.SafeMarginPreset == SafeMarginPreset.Custom)
         {
@@ -3747,6 +3765,11 @@ private StackPanel BuildSettingsOverlay()
         panel.Children.Add(CreateToggleRow("Low-distraction mode", settings.LowDistraction, v =>
         {
             settings.LowDistraction = v;
+            Services.Settings.Save();
+        }, 140));
+        panel.Children.Add(CreateToggleRow("Trim transparent padding", settings.TrimTransparentBounds, v =>
+        {
+            settings.TrimTransparentBounds = v;
             Services.Settings.Save();
         }, 140));
         panel.Children.Add(CreateToggleRow("Debug overlay bounds", settings.DebugOverlayBounds, v =>
@@ -3788,6 +3811,7 @@ private StackPanel BuildSettingsOverlay()
         {
             settings.TextMode = v;
             Services.Settings.Save();
+            RefreshSettingsPage();
         }, 140));
 
         if (settings.TextMode == TextMode.CustomGlobal)
@@ -3825,6 +3849,11 @@ private StackPanel BuildSettingsOverlay()
             settings.TextPosition = v;
             Services.Settings.Save();
         }, 140));
+        panel.Children.Add(CreateEnumComboRow("Alignment", settings.TextHorizontalAlignment, v =>
+        {
+            settings.TextHorizontalAlignment = v;
+            Services.Settings.Save();
+        }, 140));
         panel.Children.Add(CreateEnumComboRow("Font size preset", settings.TextFontSizePreset, v =>
         {
             settings.TextFontSizePreset = v;
@@ -3845,6 +3874,11 @@ private StackPanel BuildSettingsOverlay()
             settings.TextOpacity = Math.Round(v, 2);
             Services.Settings.Save();
         }, 100, 4));
+        panel.Children.Add(CreateSliderRow("Maximum width", 240, 1200, settings.TextMaxWidth, v =>
+        {
+            settings.TextMaxWidth = Math.Round(v);
+            Services.Settings.Save();
+        }, 140, 4, v => $"{v:0} px"));
 
         // Text FX group
         panel.Children.Add(CreateSectionHeader("TEXT FX"));
@@ -3910,6 +3944,21 @@ private StackPanel BuildSettingsAnimations()
             settings.ExitStyle = v;
             Services.Settings.Save();
         }, 140));
+        panel.Children.Add(CreateSliderRow("Total duration", 400, 6000, settings.OverlayDurationMs, v =>
+        {
+            settings.OverlayDurationMs = (int)v;
+            Services.Settings.Save();
+        }, 140, 4, v => $"{v / 1000:0.0} s"));
+        panel.Children.Add(CreateSliderRow("Entry duration", 0, 2000, settings.EntryDurationMs, v =>
+        {
+            settings.EntryDurationMs = (int)v;
+            Services.Settings.Save();
+        }, 140, 4, v => v < 1 ? "Auto" : $"{v:0} ms"));
+        panel.Children.Add(CreateSliderRow("Exit duration", 0, 2000, settings.ExitDurationMs, v =>
+        {
+            settings.ExitDurationMs = (int)v;
+            Services.Settings.Save();
+        }, 140, 4, v => v < 1 ? "Auto" : $"{v:0} ms"));
         panel.Children.Add(new Separator());
         panel.Children.Add(CreateToggleRow("Random animation", settings.RandomAnimation, v =>
         {
@@ -3939,6 +3988,7 @@ private StackPanel BuildSettingsAnimations()
         {
             settings.ImageMode = v;
             Services.Settings.Save();
+            RefreshSettingsPage();
         }, 140));
         if (settings.ImageMode == ImageMode.Specific)
         {
@@ -4242,8 +4292,7 @@ private StackPanel BuildSettingsSounds()
         var settings = Services.Settings!.Current;
         var panel = new StackPanel { Margin = new Thickness(16) };
 
-        // Primary celebration hotkey (F2)
-        panel.Children.Add(CreateSectionHeader("PRIMARY CELEBRATION (F2)"));
+        panel.Children.Add(CreateSectionHeader("PRIMARY CELEBRATION"));
         panel.Children.Add(new TextBlock
         {
             Text = "Press this hotkey to deploy Joseph manually.",
@@ -4254,9 +4303,7 @@ private StackPanel BuildSettingsSounds()
         });
 
         var primaryBinding = settings.GetBinding(HotkeyAction.Celebration);
-        var primaryDisplay = primaryBinding.IsEmpty
-            ? HotkeyConverter.GetDefaultBinding(HotkeyAction.Celebration).DisplayName
-            : primaryBinding.DisplayName;
+        var primaryDisplay = primaryBinding.IsEmpty ? "Not assigned" : primaryBinding.DisplayName;
         TextBlock primaryText = null!;
         var hotkeyBtn = CreateHotkeyBubbleLargeWithText(primaryDisplay, () =>
             OpenHotkeyDialog(primaryText, HotkeyAction.Celebration, primaryBinding));
@@ -4288,8 +4335,7 @@ private StackPanel BuildSettingsSounds()
             Margin = new Thickness(0, 12, 0, 0)
         });
 
-        // Audio toggle hotkey (F8)
-        panel.Children.Add(CreateSectionHeader("AUDIO TOGGLE (F8)"));
+        panel.Children.Add(CreateSectionHeader("AUDIO TOGGLE"));
         panel.Children.Add(new TextBlock
         {
             Text = "Toggles celebration sounds on/off. Stops any currently playing audio when muting.",
@@ -4301,7 +4347,7 @@ private StackPanel BuildSettingsSounds()
 
         var audioBinding = settings.AudioToggleHotkey;
         var audioTextDisplay = audioBinding.IsEmpty
-            ? "F8"
+            ? "Not assigned"
             : HotkeyConverter.GetBindingDisplayName(audioBinding.ModifierValue, audioBinding.VirtualKey, audioBinding.KeyName);
 
         TextBlock audioText = null!;
@@ -4561,13 +4607,13 @@ private StackPanel BuildSettingsSounds()
         statusRow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         // Dot
         Brush dotBrush;
-        if (supabase != null && supabase.IsConnected)
-        {
-            dotBrush = (Brush)FindResource("SuccessBrush");
-        }
-        else if (supabase != null && supabase.State == SupabaseState.Syncing)
+        if (supabase != null && supabase.State == SupabaseState.Syncing)
         {
             dotBrush = (Brush)FindResource("AccentBrush");
+        }
+        else if (supabase != null && supabase.IsConnected)
+        {
+            dotBrush = (Brush)FindResource("SuccessBrush");
         }
         else if (supabase != null && (supabase.State == SupabaseState.Offline || supabase.State == SupabaseState.Error))
         {
@@ -4581,16 +4627,20 @@ private StackPanel BuildSettingsSounds()
         // Status text
         var statusText = new TextBlock
         {
-            Text = isConfigured ? $"Supabase connected ({supabase!.StateText})" : "Supabase not configured",
+            Text = isConfigured ? $"Cloud: {supabase!.StateText}" : "Cloud not configured",
             FontSize = 11,
             FontWeight = isConfigured ? FontWeights.SemiBold : FontWeights.Normal,
-            Foreground = isConfigured ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("TextMutedBrush"),
+            Foreground = supabase?.State == SupabaseState.Connected
+                ? (Brush)FindResource("SuccessBrush")
+                : supabase?.State is SupabaseState.Error or SupabaseState.Offline
+                    ? (Brush)FindResource("DangerBrush")
+                    : (Brush)FindResource("TextSecondaryBrush"),
             VerticalAlignment = VerticalAlignment.Center
         };
         // Info line
         var infoLine = new TextBlock
         {
-            Text = "Celebration images and audio are stored in the cloud. Add a .env with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_BUCKET to enable sync.",
+            Text = "Every Joseph client uses the bundled public cloud settings to sync and upload shared Library items. No private key is needed beside the app.",
             FontSize = 10,
             Foreground = (Brush)FindResource("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
@@ -4604,8 +4654,21 @@ private StackPanel BuildSettingsSounds()
         Grid.SetRow(leftPanel, 0);
         statusRow.Children.Add(leftPanel);
 
-        var syncNowBtn = new Button { Content = "Sync Now", Style = (Style)FindResource("PrimaryButton"), Height = 32, Margin = new Thickness(0, 4, 0, 0) };
-        syncNowBtn.Click += async (_, _) => await _app.SyncNowAsync(() => ShowSettingsView());
+        var syncNowBtn = new Button
+        {
+            Content = supabase?.State == SupabaseState.Syncing ? "Syncing…" : "↻  Sync Library",
+            Style = (Style)FindResource("PrimaryButton"),
+            Height = 32,
+            Margin = new Thickness(0, 4, 0, 0),
+            IsEnabled = isConfigured && supabase?.State != SupabaseState.Syncing,
+            ToolTip = "Download and verify the latest cloud Library"
+        };
+        syncNowBtn.Click += async (_, _) =>
+        {
+            syncNowBtn.IsEnabled = false;
+            syncNowBtn.Content = "Syncing…";
+            await _app.SyncNowAsync(() => ShowSettingsView());
+        };
         Grid.SetColumn(syncNowBtn, 0);
         Grid.SetRow(syncNowBtn, 1);
         statusRow.Children.Add(syncNowBtn);
@@ -4619,7 +4682,9 @@ private StackPanel BuildSettingsSounds()
         {
             var syncStatus = new TextBlock
             {
-                Text = $"Last synced: {supabase.LastSyncUtc.Value:HH:mm:ss}",
+                Text = supabase.LastSuccessUtc.HasValue
+                    ? $"Last successful sync: {supabase.LastSuccessUtc.Value.ToLocalTime():g}  ·  {supabase.LastRemoteRows} cloud item{(supabase.LastRemoteRows == 1 ? "" : "s")}"
+                    : $"Last attempt: {supabase.LastSyncUtc.Value.ToLocalTime():g}",
                 FontSize = 10,
                 Foreground = (Brush)FindResource("TextMutedBrush"),
                 Margin = new Thickness(0, 4, 0, 0)
@@ -5226,7 +5291,7 @@ private StackPanel BuildSettingsSounds()
             var idx = friendlyList.FindIndex(f => f == s);
             if (idx >= 0 && idx < members.Count)
             {
-                onChange((TEnum)Enum.Parse(t, s));
+                onChange((TEnum)Enum.Parse(t, members[idx].Raw));
             }
         }, labelWidth);
     }
@@ -5370,7 +5435,7 @@ private StackPanel BuildSettingsSounds()
         };
         clearBtn.Click += (_, _) =>
         {
-            var emptyBinding = new HotkeyBinding();
+            var emptyBinding = new HotkeyBinding { ModifierValue = 0, VirtualKey = 0, KeyName = string.Empty };
             _app.RebindHotkey(action, emptyBinding);
             displayBox.Text = "Not assigned";
             UpdateStatusBar();
@@ -5397,7 +5462,8 @@ private StackPanel BuildSettingsSounds()
 
         win.PreviewKeyDown += (_, e) =>
         {
-            var key = e.Key;
+            // WPF reports Alt combinations through SystemKey.
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
             if (key == Key.Escape)
             {

@@ -382,7 +382,7 @@
                     <Grid x:Name="Grid" Background="{TemplateBinding Background}">
                         <Track x:Name="PART_Track">
                             <Track.Thumb>
-                                <Thumb Width="8" Height="8">
+                                <Thumb Width="8" MinHeight="24">
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Border Background="{StaticResource AccentSoftBrush}"
@@ -502,10 +502,15 @@
                                 Padding="{TemplateBinding Padding}" Margin="2,1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="28"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  ContentSource="Icon"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="Center"
+                                                  Margin="0,0,6,0"/>
                                 <ContentPresenter Grid.Column="1" VerticalAlignment="Center"
                                                   RecognizesAccessKey="True" SnapsToDevicePixels="True"/>
                                 <TextBlock Grid.Column="2" x:Name="ShortcutText"

@@ -47,6 +47,34 @@ public class SettingsService
 
     private static void ClampAndValidate(AppSettings s)
     {
+        s.GameIntegrationPort = 3000;
+        // F2/F8 are defaults, not locks. Preserve valid user-selected bindings.
+        // Only repair malformed persisted values that Win32 cannot register.
+        s.HotkeyModifierValue &= 0x0F;
+        if (s.HotkeyVirtualKey == 0)
+        {
+            s.HotkeyModifierValue = 0;
+            s.HotkeyKeyName = string.Empty;
+        }
+        else if (string.IsNullOrWhiteSpace(s.HotkeyKeyName))
+        {
+            s.HotkeyModifierValue = 0;
+            s.HotkeyVirtualKey = 0x71;
+            s.HotkeyKeyName = "F2";
+        }
+        s.HotkeyModifiers = ModifierMaskToString(s.HotkeyModifierValue);
+        s.HotkeyKey = s.HotkeyKeyName;
+
+        s.AudioToggleHotkey ??= HotkeyConverter.GetDefaultBinding(HotkeyAction.AudioToggle);
+        s.AudioToggleHotkey.ModifierValue &= 0x0F;
+        if (s.AudioToggleHotkey.VirtualKey == 0)
+        {
+            s.AudioToggleHotkey.ModifierValue = 0;
+            s.AudioToggleHotkey.KeyName = string.Empty;
+        }
+        else if (string.IsNullOrWhiteSpace(s.AudioToggleHotkey.KeyName))
+            s.AudioToggleHotkey = HotkeyConverter.GetDefaultBinding(HotkeyAction.AudioToggle);
+        s.AudioToggleHotkey.ModifierMask = ModifierMaskToString(s.AudioToggleHotkey.ModifierValue);
         s.ImageOpacity = Math.Clamp(s.ImageOpacity, 0.0, 1.0);
         s.OverlayDurationMs = Math.Clamp(s.OverlayDurationMs, 200, 10000);
         s.OverlayScale = Math.Clamp(s.OverlayScale, 0.25, 3.0);
@@ -92,6 +120,16 @@ public class SettingsService
         if (!Enum.IsDefined(s.AudioMaxDuration)) s.AudioMaxDuration = AudioMaxDuration.Seconds30;
         if (!Enum.IsDefined(s.Preset)) s.Preset = CelebrationPreset.CompletelyRandom;
         if (!Enum.IsDefined(s.SizePreset)) s.SizePreset = SizePreset.Medium;
+    }
+
+    private static string ModifierMaskToString(uint mask)
+    {
+        var parts = new List<string>();
+        if ((mask & HotkeyConverter.MOD_ALT) != 0) parts.Add("Alt");
+        if ((mask & HotkeyConverter.MOD_CONTROL) != 0) parts.Add("Ctrl");
+        if ((mask & HotkeyConverter.MOD_SHIFT) != 0) parts.Add("Shift");
+        if ((mask & HotkeyConverter.MOD_WIN) != 0) parts.Add("Win");
+        return parts.Count == 0 ? "None" : string.Join("+", parts);
     }
 
     public void Save()

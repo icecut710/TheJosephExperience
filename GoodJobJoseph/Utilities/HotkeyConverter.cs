@@ -214,6 +214,10 @@ public static class HotkeyConverter
 
     public static HotkeyBinding Resolve(JosephExperience.Models.AppSettings settings)
     {
+        if (settings.HotkeyVirtualKey == 0)
+        {
+            return new HotkeyBinding { ModifierValue = 0, VirtualKey = 0, KeyName = string.Empty };
+        }
         if (settings.HotkeyVirtualKey != 0 && !string.IsNullOrEmpty(settings.HotkeyKeyName))
         {
             return new HotkeyBinding

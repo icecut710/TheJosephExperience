@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
+using System.Globalization;
 using JosephExperience.Utilities;
 
 namespace JosephExperience.Services;
@@ -13,6 +14,7 @@ public class RealNaddService : IDisposable
     private const string PoolAddress = "4JHhAqVBXNfNCPCcbEkCZp3yPD6rxCgNc3AP2EpFUsBS";
     private const string BaseUrl = "https://api.geckoterminal.com";
     private const string ApiVersion = "v2";
+    private const string Network = "solana";
 
     private static readonly HttpClient Http = new()
     {
@@ -65,7 +67,7 @@ public class RealNaddService : IDisposable
     {
         try
         {
-            var url = $"{BaseUrl}/api/{ApiVersion}/pools/{PoolAddress}";
+            var url = $"{BaseUrl}/api/{ApiVersion}/networks/{Network}/pools/{PoolAddress}";
             var response = await Http.GetAsync(url);
             if (!response.IsSuccessStatusCode)
             {
@@ -83,42 +85,14 @@ public class RealNaddService : IDisposable
                 return null;
             }
 
-            var priceStr = attrs.GetProperty("price_usd").GetString() ?? "0";
-            if (!double.TryParse(priceStr, out var priceUsd)) priceUsd = 0;
-
-            var change24hStr = attrs.TryGetProperty("price_change_percentage_24h", out var changeElem)
-                ? changeElem.GetSingle()
-                : 0f;
-
-            var liquidityUsd = attrs.TryGetProperty("pool_created_via_mpl", out _)
-                ? 0L
-                : attrs.TryGetProperty("liquidity_usd", out var liqElem)
-                    ? liqElem.GetDouble()
-                    : 0;
-
-            var volume24h = attrs.TryGetProperty("volume_usd_24h", out var volElem)
-                ? volElem.GetDouble()
-                : 0;
-
-            var marketCap = attrs.TryGetProperty("market_cap_usd", out var mcElem)
-                ? mcElem.GetDouble()
-                : 0;
-
-            var fdv = attrs.TryGetProperty("fdv_usd", out var fdvElem)
-                ? fdvElem.GetDouble()
-                : 0;
-
-            var transactions24h = attrs.TryGetProperty("transactions_24h", out var txElem)
-                ? txElem.GetDouble()
-                : 0;
-
-            var buyTx = attrs.TryGetProperty("buy_transactions_24h", out var buyElem)
-                ? buyElem.GetInt32()
-                : 0;
-
-            var sellTx = attrs.TryGetProperty("sell_transactions_24h", out var sellElem)
-                ? sellElem.GetInt32()
-                : 0;
+            var priceUsd = ReadNumber(attrs, "base_token_price_usd");
+            var change24h = ReadNestedNumber(attrs, "price_change_percentage", "h24");
+            var liquidityUsd = ReadNumber(attrs, "reserve_in_usd");
+            var volume24h = ReadNestedNumber(attrs, "volume_usd", "h24");
+            var marketCap = ReadNumber(attrs, "market_cap_usd");
+            var fdv = ReadNumber(attrs, "fdv_usd");
+            var buyTx = (int)ReadNestedNumber(attrs, "transactions", "h24", "buys");
+            var sellTx = (int)ReadNestedNumber(attrs, "transactions", "h24", "sells");
 
             // Fetch OHLCV data for price graph
             var ohlcv = await FetchOhlcvAsync();
@@ -126,12 +100,12 @@ public class RealNaddService : IDisposable
             return new NaddMarketData
             {
                 PriceUsd = priceUsd,
-                Change24hPercent = (float)change24hStr,
+                Change24hPercent = (float)change24h,
                 LiquidityUsd = liquidityUsd,
                 Volume24hUsd = volume24h,
                 MarketCapUsd = marketCap,
                 FdvUsd = fdv,
-                Transactions24h = (int)transactions24h,
+                Transactions24h = buyTx + sellTx,
                 BuyTransactions24h = buyTx,
                 SellTransactions24h = sellTx,
                 LastUpdated = DateTime.UtcNow,
@@ -149,8 +123,7 @@ public class RealNaddService : IDisposable
     {
         try
         {
-            var range = "24H";
-            var url = $"{BaseUrl}/api/{ApiVersion}/pools/{PoolAddress}/ohlcv/{range}";
+            var url = BuildOhlcvUrl("24H");
             var response = await Http.GetAsync(url);
             if (!response.IsSuccessStatusCode) return null;
 
@@ -203,7 +176,7 @@ public class RealNaddService : IDisposable
     {
         try
         {
-            var url = $"{BaseUrl}/api/{ApiVersion}/pools/{PoolAddress}/ohlcv/{range}";
+            var url = BuildOhlcvUrl(range);
             var response = await Http.GetAsync(url);
             if (!response.IsSuccessStatusCode) return null;
 
@@ -270,6 +243,33 @@ public class RealNaddService : IDisposable
 
         // For extremely tiny prices, use scientific notation with enough digits
         return $"${priceUsd:E6}".Replace("E", "×10^");
+    }
+
+    private static string BuildOhlcvUrl(string range)
+    {
+        var (timeframe, aggregate, limit) = range.ToUpperInvariant() switch
+        {
+            "1H" => ("minute", 5, 12),
+            "6H" => ("minute", 15, 24),
+            "7D" => ("hour", 4, 42),
+            "30D" => ("day", 1, 30),
+            _ => ("hour", 1, 24)
+        };
+        return $"{BaseUrl}/api/{ApiVersion}/networks/{Network}/pools/{PoolAddress}/ohlcv/{timeframe}?aggregate={aggregate}&limit={limit}";
+    }
+
+    private static double ReadNumber(JsonElement parent, string property)
+    {
+        if (!parent.TryGetProperty(property, out var value) || value.ValueKind == JsonValueKind.Null) return 0;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number)) return number;
+        return value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+            ? number : 0;
+    }
+
+    private static double ReadNestedNumber(JsonElement parent, string objectName, string property, string? child = null)
+    {
+        if (!parent.TryGetProperty(objectName, out var nested) || !nested.TryGetProperty(property, out var value)) return 0;
+        return child is null ? ReadNumber(nested, property) : ReadNumber(value, child);
     }
 
     public void Dispose()

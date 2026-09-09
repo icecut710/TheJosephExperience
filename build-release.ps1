@@ -6,22 +6,27 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "2.0.2",
+    [Parameter(Mandatory = $true)]
+    [string]$Version,
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
-    [switch]$SelfContained
+    [switch]$SelfContained = $true
 )
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+if (-not $SelfContained) { throw "Friend releases must be self-contained." }
+if (Test-Path -LiteralPath (Join-Path $root "release\TheJosephExperience-v$Version-win-x64.zip")) { throw "Release ZIP already exists; choose a new version." }
+$published = gh release view "v$Version" --repo icecut710/TheJosephExperience --json tagName 2>$null
+if ($LASTEXITCODE -eq 0) { throw "Published versions are immutable; choose a new version." }
 $project = Join-Path $root "GoodJobJoseph\JosephExperience2.csproj"
-$distParent = Join-Path ([System.IO.Path]::GetTempPath()) "JosephDistStage"
+$distParent = Join-Path ([System.IO.Path]::GetTempPath()) ("JosephDistStage-" + [guid]::NewGuid())
 
 # Clean distribution temp dir
 if (Test-Path $distParent) { Remove-Item -LiteralPath $distParent -Recurse -Force }
 
 # Internal publish stage (space-free temp dir)
-$pubStage = Join-Path ([System.IO.Path]::GetTempPath()) "JosephPublishStage"
+$pubStage = Join-Path ([System.IO.Path]::GetTempPath()) ("JosephPublishStage-" + [guid]::NewGuid())
 if (Test-Path $pubStage) { Remove-Item -LiteralPath $pubStage -Recurse -Force }
 
   $pubArgs = @(
@@ -47,7 +52,7 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 # Build updater helper
 Write-Host "==> Building updater helper..." -ForegroundColor Cyan
 $updaterProject = Join-Path $root "GoodJobJoseph\UpdaterHelper\UpdaterHelper.csproj"
-$updaterStage = Join-Path ([System.IO.Path]::GetTempPath()) "JosephUpdaterPublish"
+$updaterStage = Join-Path ([System.IO.Path]::GetTempPath()) ("JosephUpdaterPublish-" + [guid]::NewGuid())
 if (Test-Path $updaterStage) { Remove-Item -LiteralPath $updaterStage -Recurse -Force }
 
   $updaterArgs = @(
@@ -127,7 +132,7 @@ $zipName = "TheJosephExperience-v$Version-win-x64.zip"
 $zipPath = Join-Path $root "release\$zipName"
 
 # Remove old zip
-if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+if (Test-Path $zipPath) { throw "Refusing to overwrite existing release ZIP." }
 $zipParent = Split-Path -Parent $zipPath
 if (-not (Test-Path $zipParent)) {
     New-Item -ItemType Directory -Path $zipParent -Force | Out-Null

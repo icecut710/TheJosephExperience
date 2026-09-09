@@ -52,7 +52,7 @@ public partial class OverlayWindow : Window
         try
         {
             var imageOpacity = Math.Clamp(settings.ImageOpacity, 0.0, 1.0);
-            var scale = Math.Clamp(settings.OverlayScale, 0.25, 3.0);
+            var scale = Math.Clamp(resolved?.ImageScale ?? settings.OverlayScale, 0.25, 3.0);
 
             JosephImage.RenderTransform = null;
             JosephImage.Opacity = 0;
@@ -87,7 +87,7 @@ public partial class OverlayWindow : Window
             {
                 CelebrationTextBlock.Text = NormalizeQuoteText(effectiveQuote);
                 CelebrationTextBlock.FontSize = ResolveFontSize(settings.TextFontSizePreset, settings.TextFontSize);
-                CelebrationTextBlock.Opacity = Math.Clamp(settings.TextOpacity, 0.40, 1.0);
+                CelebrationTextBlock.Opacity = Math.Clamp(settings.TextOpacity, 0.0, 1.0);
                 CelebrationTextBlock.Foreground = new SolidColorBrush(settings.TextColor);
                 CelebrationTextBlock.FontWeight = settings.TextWeight switch
                 {
@@ -148,16 +148,23 @@ public partial class OverlayWindow : Window
             if (showText && resolved is not null)
             {
                 var delay = (int)(resolved.TextDelayMs > 0 ? resolved.TextDelayMs : entryMs * 0.6);
-                var textFx = resolved.TextFx;
+                var textFx = resolved.TextAnimation switch
+                {
+                    TextAnimationStyle.FadeOnly => TextFxStyle.Fade,
+                    TextAnimationStyle.Static => TextFxStyle.None,
+                    TextAnimationStyle.Bounce => TextFxStyle.Bounce,
+                    _ => resolved.TextFx
+                };
                 var txtScale = resolved.TextScale;
                 var intensity = resolved.Intensity;
+                if (resolved.TextAnimation == TextAnimationStyle.Static) delay = 0;
                 var remaining = resolvedDuration - delay;
                 if (remaining <= 0) remaining = exitMs > 0 ? exitMs : 400;
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delay) };
                 timer.Tick += (_, _) =>
                 {
                     timer.Stop();
-                    ApplyTextFx(textFx, intensity, remaining, txtScale);
+                    ApplyTextFx(textFx, intensity, remaining, txtScale, Math.Clamp(settings.TextOpacity, 0.0, 1.0));
                 };
                 timer.Start();
             }
@@ -235,7 +242,7 @@ public partial class OverlayWindow : Window
         _lateScale = scale;
         _latePlacement = placement;
 
-        var useCenter = settings.ImagePosition == ImagePosition.Center
+        var useCenter = settings.FitMode == FitMode.ActualSize || settings.ImagePosition == ImagePosition.Center
             || settings.ImagePosition == ImagePosition.ActiveMonitorCenter;
 
         var stretch = settings.FitMode switch
@@ -1082,7 +1089,7 @@ public partial class OverlayWindow : Window
         };
     }
 
-    private void ApplyTextFx(Models.TextFxStyle fx, Models.FxIntensity intensity, int durationMs, double textScale)
+    private void ApplyTextFx(Models.TextFxStyle fx, Models.FxIntensity intensity, int durationMs, double textScale, double targetOpacity)
     {
         var amp = IntensityMul(intensity);
         var text = CelebrationTextBlock;
@@ -1099,7 +1106,7 @@ public partial class OverlayWindow : Window
                 impactGroup.Children.Add(impactBase);
                 impactGroup.Children.Add(impactAnim);
                 text.RenderTransform = impactGroup;
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(impactEntry)));
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds(impactEntry)));
                 AnimateDouble(impactAnim, ScaleTransform.ScaleXProperty, impactScale, 1.0, impactEntry, new CubicEase { EasingMode = EasingMode.EaseOut });
                 AnimateDouble(impactAnim, ScaleTransform.ScaleYProperty, impactScale, 1.0, impactEntry, new CubicEase { EasingMode = EasingMode.EaseOut });
                 break;
@@ -1111,7 +1118,7 @@ public partial class OverlayWindow : Window
                 popGroup.Children.Add(popBase);
                 popGroup.Children.Add(popAnim);
                 text.RenderTransform = popGroup;
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds((int)(180 * amp))));
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds((int)(180 * amp))));
                 AnimateDouble(popAnim, ScaleTransform.ScaleXProperty, 0.5, 1.0, (int)(200 * amp), new BackEase { Amplitude = 0.4, EasingMode = EasingMode.EaseOut });
                 AnimateDouble(popAnim, ScaleTransform.ScaleYProperty, 0.5, 1.0, (int)(200 * amp), new BackEase { Amplitude = 0.4, EasingMode = EasingMode.EaseOut });
                 break;
@@ -1123,19 +1130,24 @@ public partial class OverlayWindow : Window
                 bounceGroup.Children.Add(bounceBase);
                 bounceGroup.Children.Add(bounceTrans);
                 text.RenderTransform = bounceGroup;
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds((int)(120 * amp))));
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds((int)(120 * amp))));
                 AnimateDouble(bounceTrans, TranslateTransform.YProperty, 60 * amp, 0, (int)(400 * amp), new BounceEase { Bounces = 3, Bounciness = 0.6 });
                 break;
             case Models.TextFxStyle.Shake:
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds((int)(100 * amp))));
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds((int)(100 * amp))));
                 var shk = new DoubleAnimation(-14 * amp, 14 * amp, TimeSpan.FromMilliseconds((int)(300 * amp)))
                 { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }, AutoReverse = true };
                 var shkTrans = new TranslateTransform();
-                text.RenderTransform = shkTrans;
+                var shkGroup = new TransformGroup();
+                shkGroup.Children.Add(new ScaleTransform(textScale, textScale));
+                shkGroup.Children.Add(shkTrans);
+                text.RenderTransform = shkGroup;
                 shkTrans.BeginAnimation(TranslateTransform.XProperty, shk);
                 break;
             case Models.TextFxStyle.Typewriter:
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(60)));
+                text.RenderTransformOrigin = new Point(0.5, 0.5);
+                text.RenderTransform = new ScaleTransform(textScale, textScale);
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds(60)));
                 var full = text.Text ?? "";
                 text.Text = "";
                 var idx = 0;
@@ -1157,14 +1169,22 @@ public partial class OverlayWindow : Window
                 stampGroup.Children.Add(stampScale);
                 stampGroup.Children.Add(stampRot);
                 text.RenderTransform = stampGroup;
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(50)));
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds(50)));
                 AnimateDouble(stampScale, ScaleTransform.ScaleXProperty, 1.5 * amp, 1.0, (int)(280 * amp), new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut });
                 AnimateDouble(stampScale, ScaleTransform.ScaleYProperty, 1.5 * amp, 1.0, (int)(280 * amp), new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut });
                 AnimateDouble(stampRot, RotateTransform.AngleProperty, -6 * amp, 0, (int)(280 * amp), new CubicEase { EasingMode = EasingMode.EaseOut });
                 break;
+            case Models.TextFxStyle.None:
+                text.RenderTransformOrigin = new Point(0.5, 0.5);
+                text.RenderTransform = new ScaleTransform(textScale, textScale);
+                text.BeginAnimation(UIElement.OpacityProperty, null);
+                text.Opacity = targetOpacity;
+                break;
             case Models.TextFxStyle.Fade:
             default:
-                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds((int)(350 * amp))));
+                text.RenderTransformOrigin = new Point(0.5, 0.5);
+                text.RenderTransform = new ScaleTransform(textScale, textScale);
+                text.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, targetOpacity, TimeSpan.FromMilliseconds((int)(350 * amp))));
                 break;
         }
     }

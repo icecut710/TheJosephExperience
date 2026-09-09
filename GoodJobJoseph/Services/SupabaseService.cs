@@ -37,10 +37,9 @@ public class SupabaseConfig
 {
     public string Url { get; set; } = "";
     public string AnonKey { get; set; } = "";
-    public string UploadToken { get; set; } = "";
     public string Bucket { get; set; } = "good-job-joseph-images";
     public string ImagesBucket { get; set; } = "";
-    public string AudioBucket { get; set; } = "";
+    public string AudioBucket { get; set; } = "celebration-audio";
 
     /// <summary>Selects the storage bucket for a media type. Falls back to <see cref="Bucket"/>.</summary>
     public string BucketFor(StorageObjectKey.MediaType mediaType) => mediaType switch
@@ -65,7 +64,7 @@ public class SupabaseConfig
         && !string.IsNullOrWhiteSpace(AnonKey)
         && !Url.StartsWith("your-suppabase", StringComparison.OrdinalIgnoreCase)
         && !AnonKey.StartsWith("your-anon", StringComparison.OrdinalIgnoreCase);
-    public bool CanUpload => IsConfigured && !string.IsNullOrWhiteSpace(UploadToken);
+    public bool CanUpload => IsConfigured;
 }
 
 /// <summary>
@@ -85,7 +84,10 @@ public class SupabaseService : IDisposable
 {
     private static readonly HttpClient Http = new()
     {
-        Timeout = TimeSpan.FromSeconds(30)
+        // Cloud media can be several megabytes and some home connections deliver
+        // it slowly. Keep catalog calls bounded while allowing valid media
+        // transfers enough time to finish and pass their hash check.
+        Timeout = TimeSpan.FromMinutes(5)
     };
 
     private readonly string _dataDir;
@@ -129,6 +131,11 @@ public class SupabaseService : IDisposable
             var bundled = Path.Combine(AppContext.BaseDirectory, ".env");
             var dataEnv = Path.Combine(dataDir, ".env");
             var envFile = File.Exists(bundled) ? bundled : (File.Exists(dataEnv) ? dataEnv : bundled);
+            var publicConfig = Path.Combine(AppContext.BaseDirectory, "cloud-config.json");
+            if (File.Exists(publicConfig))
+            {
+                Config = JsonSerializer.Deserialize<SupabaseConfig>(File.ReadAllText(publicConfig)) ?? new();
+            }
             if (File.Exists(envFile))
             {
                 Config = ParseEnv(File.ReadAllLines(envFile));
@@ -164,8 +171,6 @@ public class SupabaseService : IDisposable
                 case "SUPABASE_URL" when value.Length > 0: cfg.Url = value.TrimEnd('/'); break;
                 case "SUPABASE_ANON_KEY" when value.Length > 0: cfg.AnonKey = value; break;
                 case "SUPABASE_PUBLISHABLE_KEY" when value.Length > 0: cfg.AnonKey = value; break;
-                case "SUPABASE_SERVICE_ROLE_KEY" when value.Length > 0: cfg.UploadToken = value; break;
-                case "SUPABASE_UPLOAD_TOKEN" when value.Length > 0: cfg.UploadToken = value; break;
                 case "SUPABASE_BUCKET" when value.Length > 0: cfg.Bucket = value; break;
                 case "SUPABASE_IMAGES_BUCKET" when value.Length > 0: cfg.ImagesBucket = value; break;
                 case "SUPABASE_AUDIO_BUCKET" when value.Length > 0: cfg.AudioBucket = value; break;
@@ -445,9 +450,7 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
             LastRemoteRows = rows.Count;
             AppLog.Info($"Supabase: catalog received, {rows.Count} enabled rows.");
 
-            var syncDir = Directory.Exists(cacheDir)
-                ? Path.Combine(cacheDir, "images")
-                : cacheDir;
+            var syncDir = Path.Combine(cacheDir, "images");
             Directory.CreateDirectory(syncDir);
 
             for (int i = 0; i < rows.Count; i++)
@@ -474,6 +477,14 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
             result.Reconciled += ReconcileStaleMirrors(library, rows.Select(r => r.Id).ToHashSet());
 
             LastSyncUtc = DateTime.UtcNow;
+            if (result.Failed > 0)
+            {
+                SyncFailuresInRow++;
+                LastError = $"{result.Failed} cloud items could not be synced. Cached items remain available.";
+                State = SupabaseState.Error;
+                result.Error = LastError;
+                return result;
+            }
             LastSuccessUtc = DateTime.UtcNow;
             SyncFailuresInRow = 0;
             LastError = string.Empty;
@@ -724,19 +735,36 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
 
     private async Task DownloadToFileAsync(RemoteImage row, string tempFile, CancellationToken ct)
     {
-        var url = $"{Config.Url}/storage/v1/object/{Config.BucketForPath(row.StoragePath)}/{Uri.EscapeDataString(row.StoragePath ?? "")}?download=1";
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Add("apikey", Config.AnonKey);
-        request.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
-        using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        var preferredBucket = Config.BucketForPath(row.StoragePath);
+        var buckets = row.StoragePath?.StartsWith("images/", StringComparison.OrdinalIgnoreCase) == true
+            ? new[] { preferredBucket, "joseph-images" }.Distinct(StringComparer.OrdinalIgnoreCase)
+            : new[] { preferredBucket };
+
+        foreach (var bucket in buckets)
         {
-            throw new InvalidOperationException($"Storage request failed ({(int)response.StatusCode}) for {row.Id}.");
+            var url = $"{Config.Url}/storage/v1/object/{bucket}/{Uri.EscapeDataString(row.StoragePath ?? "")}?download=1";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("apikey", Config.AnonKey);
+            request.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
+            using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                await using var fs = File.Create(tempFile);
+                await response.Content.CopyToAsync(fs, ct).ConfigureAwait(false);
+                if (!string.Equals(bucket, preferredBucket, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLog.Warn($"Supabase: recovered legacy image {row.Id} from bucket '{bucket}'.");
+                }
+                return;
+            }
+
+            if ((int)response.StatusCode is not 400 and not 404)
+            {
+                throw new InvalidOperationException($"Storage request failed ({(int)response.StatusCode}) for {row.Id}.");
+            }
         }
-        await using (var fs = File.Create(tempFile))
-        {
-            await response.Content.CopyToAsync(fs, ct).ConfigureAwait(false);
-        }
+
+        throw new InvalidOperationException($"Storage object was not found in the configured or legacy image bucket for {row.Id}.");
     }
 
     /// <summary>
@@ -754,7 +782,7 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
             var catalogUrl = $"{Config.Url}/rest/v1/celebration_images";
             using var request = new HttpRequestMessage(HttpMethod.Post, catalogUrl);
             request.Headers.Add("apikey", Config.AnonKey);
-            request.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
+            request.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
             request.Headers.Add("Prefer", "return=minimal");
 
             var payload = new Dictionary<string, object?>
@@ -803,12 +831,6 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
             result.Error = "Supabase is not configured. Add a .env file (see .env.example).";
             return result;
         }
-        if (!Config.CanUpload)
-        {
-            result.Error = "Supabase upload token not configured. Add SUPABASE_SERVICE_ROLE_KEY to .env.";
-            return result;
-        }
-
         var fileInfo = new FileInfo(localFilePath);
         if (!fileInfo.Exists)
         {
@@ -838,7 +860,7 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
          var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.BucketFor(StorageObjectKey.MediaType.Images)}/{storagePath}";
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         uploadRequest.Headers.Add("apikey", Config.AnonKey);
-        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
+        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
         var mimeType = StorageObjectKey.GetMimeType(StorageObjectKey.MediaType.Images, ext);
         uploadRequest.Content = new ByteArrayContent(fileBytes);
         uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
@@ -856,7 +878,7 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
             }
 
             // Insert row into the remote celebration_images catalog via REST API
-            // (uses the service role key to bypass RLS for inserts).
+            // The constrained public INSERT policy validates the UUID path and metadata.
             var now = DateTime.UtcNow.ToString("o");
             var remoteId = Guid.NewGuid().ToString();
             var catalogOk = await InsertCatalogRowAsync(remoteId, displayName ?? displayNameFallback,
@@ -936,12 +958,6 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
             result.Error = "Supabase is not configured. Add a .env file (see .env.example).";
             return result;
         }
-        if (!Config.CanUpload)
-        {
-            result.Error = "Supabase upload token not configured. Add SUPABASE_SERVICE_ROLE_KEY to .env.";
-            return result;
-        }
-
         var fileInfo = new FileInfo(localFilePath);
         if (!fileInfo.Exists)
         {
@@ -971,7 +987,7 @@ public async Task<SupabaseSyncResult> TestConnectionAsync(CancellationToken ct =
         var uploadUrl = $"{Config.Url}/storage/v1/object/{Config.BucketFor(StorageObjectKey.MediaType.Audio)}/{storagePath}";
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         uploadRequest.Headers.Add("apikey", Config.AnonKey);
-        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.UploadToken}");
+        uploadRequest.Headers.Add("Authorization", $"Bearer {Config.AnonKey}");
         var mimeType = StorageObjectKey.GetMimeType(StorageObjectKey.MediaType.Audio, ext);
         uploadRequest.Content = new ByteArrayContent(fileBytes);
         uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);

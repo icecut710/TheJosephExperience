@@ -25,13 +25,6 @@ public interface IGsiServer : IDisposable
 public sealed class GsiServer : IGsiServer
 {
     private const long MaxPayloadBytes = 2 * 1024 * 1024; // real GSI payloads are a few KB.
-    // Port range we are willing to try (avoid well-known ports 1024-49151 which are
-    // typically reserved/static; the dynamic/private range 49152-65535 is recommended
-    // by IANA for short-lived apps. If the user sets a port outside this range we
-    // still attempt it but log a warning.
-    private static readonly int MinDynamicPort = 49152;
-    private static readonly int MaxDynamicPort = 65535;
-
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -51,12 +44,6 @@ public sealed class GsiServer : IGsiServer
             if (IsRunning) return true;
             _authToken = string.IsNullOrEmpty(authToken) ? null : authToken;
 
-            // Port validation: prefer dynamic/private range 49152-65535.
-            // If the port is outside this range we still attempt it but log a warning.
-            bool portInDynamicRange = (port >= MinDynamicPort && port <= MaxDynamicPort);
-            if (!portInDynamicRange)
-                AppLog.Warn($"GsiServer: port {port} is outside the recommended dynamic range ({MinDynamicPort}-{MaxDynamicPort}); may conflict with other services.");
-
             try
             {
                 var listener = new HttpListener();
@@ -68,7 +55,9 @@ public sealed class GsiServer : IGsiServer
                 _listener = listener;
                 Port = port;
                 _cts = new CancellationTokenSource();
-                _loop = Task.Run(() => LoopAsync(listener, _cts.Token));
+                var token = _cts.Token;
+                LastPayloadUtc = null;
+                _loop = Task.Run(() => LoopAsync(listener, token));
                 IsRunning = true;
                 AppLog.Info($"GsiServer: listening on http://127.0.0.1:{port}/");
                 return true;
@@ -134,8 +123,15 @@ public sealed class GsiServer : IGsiServer
             return true;
 
         // Token embedded in the GSI payload itself (what real CS2 traffic looks like).
-        return body.Contains("\"token\"", StringComparison.OrdinalIgnoreCase) &&
-               body.Contains(_authToken, StringComparison.Ordinal);
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(body);
+            if (!json.RootElement.TryGetProperty("auth", out var auth)) return false;
+            if (auth.ValueKind == System.Text.Json.JsonValueKind.Object && auth.TryGetProperty("token", out var value))
+                return value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == _authToken;
+            return auth.ValueKind == System.Text.Json.JsonValueKind.String && auth.GetString() == _authToken;
+        }
+        catch (System.Text.Json.JsonException) { return false; }
     }
 
     private async Task LoopAsync(HttpListener listener, CancellationToken token)
@@ -157,7 +153,7 @@ public sealed class GsiServer : IGsiServer
                 continue;
             }
 
-            _ = Task.Run(() => HandleAsync(ctx, token), token);
+            await HandleAsync(ctx, token).ConfigureAwait(false);
         }
     }
 

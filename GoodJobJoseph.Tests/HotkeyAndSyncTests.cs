@@ -78,6 +78,21 @@ public class HotkeyConverterTests
     }
 
     [Fact]
+    public void Resolve_ExplicitlyClearedBinding_RemainsUnassigned()
+    {
+        var settings = new AppSettings
+        {
+            HotkeyModifierValue = 0,
+            HotkeyVirtualKey = 0,
+            HotkeyKeyName = string.Empty,
+            HotkeyModifiers = "None",
+            HotkeyKey = string.Empty
+        };
+
+        Assert.True(HotkeyConverter.Resolve(settings).IsEmpty);
+    }
+
+    [Fact]
     public void GetDefaultBinding_AudioToggle_IsF8()
     {
         var b = HotkeyConverter.GetDefaultBinding(HotkeyAction.AudioToggle);

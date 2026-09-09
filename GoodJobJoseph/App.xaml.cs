@@ -18,7 +18,7 @@ public partial class App : Application
 {
     public static RollingFileLogger Logger = null!;
     public static AppSettingsService? Services;
-    public static readonly string Version = "2.0.2";
+    public static readonly string Version = new VersionService().CurrentVersionString;
 
     private DatabaseService? _db;
     private SettingsService? _settings;
@@ -85,7 +85,7 @@ using var pipe = new System.IO.Pipes.NamedPipeClientStream(
 
             Logger = new RollingFileLogger(AppPaths.LogsDir);
             AppLog.Initialize(Logger);
-            Logger.Info("Starting The Joseph Experience 2.0 v2.0.2");
+            Logger.Info($"Starting The Joseph Experience v{Version}");
 
             try
             {
@@ -335,7 +335,11 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
             _cs2 = new CounterStrikeIntegrationService(
                 () => _celebration ?? throw new InvalidOperationException("CelebrationService not initialized"),
                 () => _settings!.Current);
-            _cs2.StateChanged += state => AppLog.Info($"CS2 status: {state}");
+            _cs2.StateChanged += state =>
+            {
+                AppLog.Info($"CS2 status: {state}");
+                Dispatcher.BeginInvoke(() => _mainWindow?.OnCs2StateChanged());
+            };
         }
 
         if (_settings?.Current.GameIntegrationEnabled == true)
@@ -641,25 +645,22 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         var settings = _settings!.Current;
         var binding = HotkeyConverter.Resolve(settings);
 
-        // Migrate legacy F8 default to F2 if needed.
-        if (binding.VirtualKey == 0x77 && binding.ModifierValue == 0)
-        {
-            binding = new Models.HotkeyBinding { VirtualKey = 0x71, KeyName = "F2" };
-            settings.HotkeyModifierValue = 0;
-            settings.HotkeyVirtualKey = 0x71;
-            settings.HotkeyKeyName = "F2";
-            settings.HotkeyModifiers = "None";
-            settings.HotkeyKey = "F2";
-            _settings.Save();
-        }
-
         var result = _hotkey.Register(HotkeyAction.Celebration, "Celebration", binding);
-        if (result != RegistrationResult.Success)
+        if (result is not RegistrationResult.Success and not RegistrationResult.NoKeySelected)
         {
             Logger.Error($"Hotkey registration failed: {binding.DisplayName} ({HotkeyService.GetResultMessage(result, _hotkey.GetRegistration(HotkeyAction.Celebration)?.ErrorCode, HotkeyAction.Celebration)})");
             var f2 = new Models.HotkeyBinding { VirtualKey = 0x71, KeyName = "F2" };
             var fallbackResult = _hotkey.Register(HotkeyAction.Celebration, "Celebration", f2);
-            if (fallbackResult != RegistrationResult.Success)
+            if (fallbackResult == RegistrationResult.Success)
+            {
+                settings.HotkeyModifierValue = f2.ModifierValue;
+                settings.HotkeyVirtualKey = f2.VirtualKey;
+                settings.HotkeyKeyName = f2.KeyName;
+                settings.HotkeyModifiers = "None";
+                settings.HotkeyKey = f2.KeyName;
+                _settings.Save();
+            }
+            else
             {
                 Logger.Warn("Hotkey registration failed after fallback — F2 may be in use by Windows or another app.");
             }
@@ -693,25 +694,7 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
 
     internal void RebindHotkey(HotkeyBinding binding)
     {
-        _settings!.Current.HotkeyModifierValue = binding.ModifierValue;
-        _settings.Current.HotkeyVirtualKey = binding.VirtualKey;
-        _settings.Current.HotkeyKeyName = binding.KeyName;
-        _settings.Current.HotkeyModifiers = ModifierMaskToString(binding.ModifierValue);
-        _settings.Current.HotkeyKey = binding.KeyName;
-        _settings.Save();
-
-        var result = _hotkey!.Register(HotkeyAction.Celebration, "Celebration", binding);
-        if (result == RegistrationResult.Success)
-        {
-            Logger.Info($"Hotkey rebound: {binding.DisplayName}");
-            _mainWindow?.ShowHotkeySuccess(binding.DisplayName);
-        }
-        else
-        {
-            Logger.Error($"Hotkey rebind failed: {HotkeyService.GetResultMessage(result, _hotkey.GetRegistration(HotkeyAction.Celebration)?.ErrorCode, HotkeyAction.Celebration)}");
-            _mainWindow?.ShowHotkeyError($"The new shortcut could not be registered.\n\n{HotkeyService.GetResultMessage(result, _hotkey.GetRegistration(HotkeyAction.Celebration)?.ErrorCode, HotkeyAction.Celebration)}", binding);
-        }
-        UpdateStatusIndicator();
+        RebindHotkey(HotkeyAction.Celebration, binding);
     }
 
     internal void RebindHotkey(HotkeyAction action, HotkeyBinding binding)
@@ -726,33 +709,38 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
         }
 
         var settings = _settings!.Current;
-        switch (action)
-        {
-            case HotkeyAction.Celebration:
-                settings.HotkeyModifierValue = binding.ModifierValue;
-                settings.HotkeyVirtualKey = binding.VirtualKey;
-                settings.HotkeyKeyName = binding.KeyName;
-                settings.HotkeyModifiers = ModifierMaskToString(binding.ModifierValue);
-                settings.HotkeyKey = binding.KeyName;
-                break;
-            case HotkeyAction.AudioToggle:
-                settings.AudioToggleHotkey = binding;
-                break;
-        }
-        _settings.Save();
-
+        var previous = settings.GetBinding(action);
         var result = _hotkey!.Register(action, action.ToString(), binding);
-        if (result == RegistrationResult.Success)
+        if (result is RegistrationResult.Success or RegistrationResult.NoKeySelected)
         {
+            switch (action)
+            {
+                case HotkeyAction.Celebration:
+                    settings.HotkeyModifierValue = binding.ModifierValue;
+                    settings.HotkeyVirtualKey = binding.VirtualKey;
+                    settings.HotkeyKeyName = binding.KeyName;
+                    settings.HotkeyModifiers = ModifierMaskToString(binding.ModifierValue);
+                    settings.HotkeyKey = binding.KeyName;
+                    break;
+                case HotkeyAction.AudioToggle:
+                    settings.AudioToggleHotkey = binding;
+                    break;
+            }
+            _settings.Save();
             Logger.Info($"Hotkey rebound: {action} -> {binding.DisplayName}");
             _mainWindow?.ShowHotkeySuccess($"{action}: {binding.DisplayName}");
         }
         else
         {
-            Logger.Error($"Hotkey rebind failed: {HotkeyService.GetResultMessage(result, _hotkey.GetRegistration(action)?.ErrorCode, action)}");
+            var failedCode = _hotkey.GetRegistration(action)?.ErrorCode;
+            var failedMessage = HotkeyService.GetResultMessage(result, failedCode, action);
+            // Register() removes the old binding before trying the new one. Restore
+            // it so a collision or OS reservation never leaves the action broken.
+            _hotkey.Register(action, action.ToString(), previous);
+            Logger.Error($"Hotkey rebind failed: {failedMessage}");
             _mainWindow?.ShowHotkeyError(
                 $"The key combination '{binding.DisplayName}' could not be registered.\n\n" +
-                $"{HotkeyService.GetResultMessage(result, _hotkey.GetRegistration(action)?.ErrorCode, action)}", binding);
+                failedMessage, binding);
         }
         UpdateStatusIndicator();
     }
