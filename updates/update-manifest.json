@@ -1,16 +1,13 @@
 ﻿{
-    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.3/TheJosephExperience-v2.1.3-win-x64.zip",
+    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.4/TheJosephExperience-v2.1.4-win-x64.zip",
     "minimumSupportedVersion":  "2.0.0",
-    "version":  "2.1.3",
+    "version":  "2.1.4",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-09T03:56:50.5867918Z",
+    "releaseDateUtc":  "2026-09-09T20:26:44.6041028Z",
     "releaseType":  "release",
-    "sha256":  "763c1abdeb12e8a4c253ca4da7b6e2ddebbf371d9e87ea92d7dde23b2532b462",
+    "sha256":  "8c1ab221ebb017299784b4865f9742decf082986b3d23b9a1c4ff577a4faa351",
     "releaseNotes":  [
-                         "- Fully automatic cloud updates: silent check on startup + every 6h, background download with SHA-256 verify, auto-install when the celebration overlay is idle",
-                         "- Update settings: Check / Download / Install automatically toggles in Settings",
-                         "- Per-game switches: HL2 and MW2 events can be enabled independently of CS2",
-                         "- Fixed manual update install path (wrong exe path passed to backup step)"
+                         "Fix update dialog; restore chart polish; HL2 + MW2 built"
                      ],
-    "fileSize":  98060984
+    "fileSize":  98060821
 }
