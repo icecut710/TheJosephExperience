@@ -1870,7 +1870,7 @@ public partial class MainWindow : Window
             RefreshGamesView();
         }));
 
-        content.Children.Add(CreateComboRow("GSI Port", new[] { "3000" }, settings.GameIntegrationPort.ToString(), v =>
+        content.Children.Add(CreateComboRow("GSI Port", new[] { "3000", "1337", "17777", "27015" }, settings.GameIntegrationPort.ToString(), v =>
         {
             if (int.TryParse(v, out var parsed) && parsed >= 1 && parsed <= 65535 && parsed != settings.GameIntegrationPort)
             {
@@ -1882,35 +1882,15 @@ public partial class MainWindow : Window
             }
         }));
 
-        // Auth token (debounced so we don't rewrite the cfg per keystroke)
-        var authGrid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
-        authGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-        authGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        authGrid.Children.Add(CreateFieldLabel("Auth Token (optional)"));
-        var authBox = new TextBox
+        // Auth token is generated and installed with the GSI config automatically —
+        // never shown to the user.
+        content.Children.Add(new TextBlock
         {
-            Text = settings.GameIntegrationAuthToken ?? "",
-            ToolTip = "Optional auth token. Leave blank for no authentication.",
-            FontSize = 11.5
-        };
-        var tokenApply = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-        void ApplyToken()
-        {
-            tokenApply.Stop();
-            settings.GameIntegrationAuthToken = authBox.Text;
-            Services.Settings.Save();
-            _app.AttachCs2();
-        }
-        tokenApply.Tick += (_, _) => ApplyToken();
-        authBox.TextChanged += (_, _) =>
-        {
-            tokenApply.Stop();
-            tokenApply.Start();
-        };
-        authBox.LostFocus += (_, _) => ApplyToken();
-        Grid.SetColumn(authBox, 1);
-        authGrid.Children.Add(authBox);
-        content.Children.Add(authGrid);
+            Text = "Authentication: managed automatically when the GSI config is installed.",
+            FontSize = 10.5,
+            Foreground = (Brush)FindResource("TextMutedBrush"),
+            Margin = new Thickness(0, 4, 0, 8)
+        });
 
         content.Children.Add(CreateButtonRow(attached ? "Repair GSI Configuration" : "Activate & Install CS2", () =>
         {
