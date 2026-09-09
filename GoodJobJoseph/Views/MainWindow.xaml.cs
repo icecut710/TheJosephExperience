@@ -5743,32 +5743,6 @@ private StackPanel BuildSettingsSounds()
                 Padding = new Thickness(14, 0, 14, 0),
                 Margin = new Thickness(8, 0, 0, 0)
             };
-            updateNowBtn.Click += async (_, _) =>
-            {
-                updateNowBtn.IsEnabled = false;
-                laterBtn.IsEnabled = false;
-                win.Close();
-
-                await updateService.DownloadUpdateAsync(
-                    result.DownloadUrl ?? "",
-                    result.Sha256 ?? "",
-                    CancellationToken.None);
-
-                // After download+verify, prepare and launch installer
-                var extractedPath = updateService.ValidateAndExtractStagedPackage();
-                if (extractedPath is not null)
-                {
-                    var backupPath = updateService.PrepareInstall();
-                    var targetExe = backupPath?.Replace(".old", "");
-                    var newExe = System.IO.Path.Combine(extractedPath, "TheJosephExperience.exe");
-                    updateService.LaunchUpdaterHelper(Environment.ProcessId, targetExe ?? "", newExe);
-                    _app.Shutdown();
-                }
-                else
-                {
-                    MessageBox.Show("Update failed to extract. Please try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            };
             buttonRow.Children.Add(updateNowBtn);
 
             panel.Children.Add(buttonRow);
