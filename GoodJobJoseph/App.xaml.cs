@@ -171,7 +171,131 @@ using var pipe = new System.IO.Pipes.NamedPipeClientStream(
             RunStartupIntegrityScan();
             StartBackgroundSync();
             ConfigurePeriodicSync();
+            StartAutoUpdater();
         }
+
+    // =================================================================
+    // AUTOMATIC CLOUD UPDATES
+    // =================================================================
+    private UpdateService? _autoUpdateService;
+    private string? _stagedNewExePath;
+    private string? _stagedTargetExePath;
+    private string? _stagedVersion;
+    private bool _autoUpdateBusy;
+    private System.Windows.Threading.DispatcherTimer? _autoInstallTimer;
+
+    /// <summary>
+    /// Fully automatic update pipeline: check on startup + every 6 hours →
+    /// silent download + SHA-256 verify → extract → stage → auto-install when
+    /// the overlay is idle (never mid-celebration). Silent: never pops dialogs.
+    /// </summary>
+    private async void StartAutoUpdater()
+    {
+        // Deferred so startup stays responsive on low-end machines.
+        await Task.Delay(TimeSpan.FromSeconds(15));
+        await RunAutoUpdateCheckAsync();
+
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromHours(6) };
+        timer.Tick += async (_, _) => await RunAutoUpdateCheckAsync();
+        timer.Start();
+    }
+
+    private async Task RunAutoUpdateCheckAsync()
+    {
+        if (_autoUpdateBusy) return;
+        var s = _settings?.Current;
+        if (s is null || !s.AutoCheckUpdates) return;
+
+        _autoUpdateBusy = true;
+        try
+        {
+            var svc = new UpdateService(
+                new VersionService(),
+                new HttpUpdateProvider(s.UpdateManifestUrl ?? ""),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.ProcessPath ?? AppContext.BaseDirectory);
+            _autoUpdateService = svc;
+
+            var result = await svc.CheckForUpdatesAsync();
+            if (result.Result != UpdateCheckResult.UpdateAvailable || result.RemoteVersion is null)
+            {
+                Logger.Info($"Auto update check: {result.Result}.");
+                return;
+            }
+
+            if (!s.AutoDownloadUpdates)
+            {
+                _tray?.ShowNotification("Joseph update available",
+                    $"Version {result.RemoteVersion} is available. Open the app → Settings to install.");
+                return;
+            }
+
+            Logger.Info($"Auto update: downloading v{result.RemoteVersion}…");
+            var progress = await svc.DownloadUpdateAsync(result.DownloadUrl ?? "", result.Sha256 ?? "", CancellationToken.None);
+            if (progress is null || svc.StagedPackagePath is null)
+            {
+                Logger.Warn("Auto update download failed.");
+                return;
+            }
+
+            var extracted = svc.ValidateAndExtractStagedPackage();
+            if (extracted is null) { Logger.Warn("Auto update extraction failed."); return; }
+            var newExe = UpdatePackageLocator.FindExecutable(extracted);
+            if (newExe is null) { Logger.Warn("Auto update package missing executable."); return; }
+            var backup = svc.PrepareInstall();
+            if (backup is null) { Logger.Warn("Auto update backup failed."); return; }
+
+            _stagedNewExePath = newExe;
+            _stagedTargetExePath = backup.Replace(".old", "");
+            _stagedVersion = result.RemoteVersion;
+
+            if (s.AutoInstallUpdates)
+            {
+                _tray?.ShowNotification("Joseph update ready",
+                    $"Version {result.RemoteVersion} will install automatically in about a minute.");
+                StartAutoInstallCountdown();
+            }
+            else
+            {
+                _tray?.ShowNotification("Joseph update ready",
+                    $"Version {result.RemoteVersion} downloaded. Open the app → Settings → Check for Updates to install.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Auto update check failed: {ex.Message}");
+        }
+        finally
+        {
+            _autoUpdateBusy = false;
+        }
+    }
+
+    private void StartAutoInstallCountdown()
+    {
+        if (_autoInstallTimer is not null) return; // already waiting
+        _autoInstallTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(45) };
+        _autoInstallTimer.Tick += (_, _) =>
+        {
+            // Never interrupt a celebration — retry on the next tick.
+            if (_celebration?.IsOverlayVisible == true) return;
+
+            _autoInstallTimer!.Stop();
+            _autoInstallTimer = null;
+
+            var svc = _autoUpdateService;
+            if (svc is null || _stagedNewExePath is null || _stagedTargetExePath is null) return;
+
+            Logger.Info($"Auto update: installing v{_stagedVersion}…");
+            if (svc.LaunchUpdaterHelper(Environment.ProcessId, _stagedTargetExePath, _stagedNewExePath))
+            {
+                _tray?.ShowNotification("Joseph update installing",
+                    $"Version {_stagedVersion} — the app will restart automatically.");
+                Shutdown();
+            }
+        };
+        _autoInstallTimer.Start();
+    }
 
     private void RunStartupIntegrityScan()
     {
@@ -358,24 +482,36 @@ using var server = new System.IO.Pipes.NamedPipeServerStream(
     internal void StartGameProviders()
     {
         var enabled = _settings?.Current.GameIntegrationEnabled == true;
+        var s = _settings?.Current;
+
+        // Per-game switches (each requires the master switch).
+        var hl2On = enabled && (s?.Hl2IntegrationEnabled ?? true);
+        var mw2On = enabled && (s?.Mw2IntegrationEnabled ?? true);
 
         // Set IsEnabled on providers so their detection loops can short-circuit
-        if (_hl2 is not null) _hl2.IsEnabled = enabled;
-        if (_mw2 is not null) _mw2.IsEnabled = enabled;
+        if (_hl2 is not null) _hl2.IsEnabled = hl2On;
+        if (_mw2 is not null) _mw2.IsEnabled = mw2On;
 
         _ = Task.Run(async () =>
         {
-            if (enabled)
+            if (hl2On)
             {
                 try { await (_hl2?.StartAsync() ?? ValueTask.CompletedTask); }
                 catch (Exception ex) { AppLog.Warn($"HL2 provider start error: {ex.Message}"); }
-                try { await (_mw2?.StartAsync() ?? ValueTask.CompletedTask); }
-                catch (Exception ex) { AppLog.Warn($"MW2 provider start error: {ex.Message}"); }
             }
             else
             {
                 try { await (_hl2?.StopAsync() ?? ValueTask.CompletedTask); }
                 catch (Exception ex) { AppLog.Warn($"HL2 provider stop error: {ex.Message}"); }
+            }
+
+            if (mw2On)
+            {
+                try { await (_mw2?.StartAsync() ?? ValueTask.CompletedTask); }
+                catch (Exception ex) { AppLog.Warn($"MW2 provider start error: {ex.Message}"); }
+            }
+            else
+            {
                 try { await (_mw2?.StopAsync() ?? ValueTask.CompletedTask); }
                 catch (Exception ex) { AppLog.Warn($"MW2 provider stop error: {ex.Message}"); }
             }

@@ -401,6 +401,14 @@ public class AppSettings
     public SyncFrequency SyncFrequency { get; set; } = SyncFrequency.OnStartup;
     public string UpdateManifestUrl { get; set; } = "https://raw.githubusercontent.com/icecut710/TheJosephExperience/master/updates/update-manifest.json";
     public bool SyncOnStartup { get; set; } = true;
+
+    // ---- Automatic cloud updates ----
+    /// <summary>Check the update manifest automatically on startup and periodically.</summary>
+    public bool AutoCheckUpdates { get; set; } = true;
+    /// <summary>Download + verify an update silently in the background once detected.</summary>
+    public bool AutoDownloadUpdates { get; set; } = true;
+    /// <summary>Install a staged update automatically when the overlay is idle (never mid-celebration).</summary>
+    public bool AutoInstallUpdates { get; set; } = true;
     public GridDensity GridDensity { get; set; } = GridDensity.Normal;
     public LibrarySortMode LibrarySort { get; set; } = LibrarySortMode.Name;
     public LibraryFilterMode LibraryDefaultFilter { get; set; } = LibraryFilterMode.All;
@@ -426,6 +434,9 @@ public class AppSettings
     // ---- CS:GO / CS2 game-state integration ----
     /// <summary>Enable automatic celebrations from CS:GO / CS2 GSI events.</summary>
     public bool GameIntegrationEnabled { get; set; }
+    /// <summary>Per-game switches (require GameIntegrationEnabled). Default on so behavior is unchanged.</summary>
+    public bool Hl2IntegrationEnabled { get; set; } = true;
+    public bool Mw2IntegrationEnabled { get; set; } = true;
     /// <summary>True once the user has successfully run Attach CS2. Surfaced in the UI as a persistent indicator.</summary>
     public bool Cs2Attached { get; set; }
     /// <summary>Path to the CS2 cfg folder the user attached to, for display and verification.</summary>

@@ -54,6 +54,9 @@ public class CelebrationService
             ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
     }
 
+    /// <summary>True while a celebration overlay is on screen (used to time automatic updates safely).</summary>
+    public bool IsOverlayVisible => _overlay.IsVisible;
+
     public bool Trigger(string triggerType, bool? lowDistractionOverride = null)
     {
         lock (_celebrationGuard)

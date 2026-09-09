@@ -448,7 +448,7 @@ public partial class MainWindow : Window
         // This keeps the status bar clean for users who only use manual celebrations.
         var gamesEnabled = settings.GameIntegrationEnabled;
         if (FindName("StatusCs2Badge") is FrameworkElement cs2Badge) cs2Badge.Visibility = gamesEnabled ? Visibility.Visible : Visibility.Collapsed;
-        if (FindName("StatusMw2Badge") is FrameworkElement mw2Badge) mw2Badge.Visibility = gamesEnabled ? Visibility.Visible : Visibility.Collapsed;
+        if (FindName("StatusMw2Badge") is FrameworkElement mw2Badge) mw2Badge.Visibility = gamesEnabled && settings.Mw2IntegrationEnabled ? Visibility.Visible : Visibility.Collapsed;
 
         RefreshStatsDisplay();
         UpdateCs2Status();
@@ -646,7 +646,17 @@ public partial class MainWindow : Window
 
         if (modeText != null) content.Children.Add(modeText);
 
-        return content;
+        // Per-game switch — works independently of the CS2 master switch.
+        var root = new StackPanel();
+        root.Children.Add(content);
+        root.Children.Add(CreateToggleRow("Enable MW2 events", settings.Mw2IntegrationEnabled, v =>
+        {
+            settings.Mw2IntegrationEnabled = v;
+            Services.Settings.Save();
+            _app.StartGameProviders();
+            UpdateStatusBar();
+        }));
+        return root;
     }
 
     private static string CurrentHotkeyText(AppSettings settings)
@@ -1963,6 +1973,15 @@ public partial class MainWindow : Window
     private StackPanel BuildHl2StatusContent(IGameIntegrationProvider provider, AppSettings settings)
     {
         var content = new StackPanel();
+
+        // Per-game switch — works independently of the CS2 master switch.
+        content.Children.Add(CreateToggleRow("Enable HL2 events", settings.Hl2IntegrationEnabled, v =>
+        {
+            settings.Hl2IntegrationEnabled = v;
+            Services.Settings.Save();
+            _app.StartGameProviders();
+            UpdateStatusBar();
+        }));
 
         var hl2Active = provider.State == "Running";
 
@@ -4411,7 +4430,7 @@ private StackPanel BuildSettingsSounds()
                     versionService,
                     new HttpUpdateProvider(settings.UpdateManifestUrl ?? ""),
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    AppContext.BaseDirectory);
+                    Environment.ProcessPath ?? AppContext.BaseDirectory);
 
                 var checkResult = await updateService.CheckForUpdatesAsync();
 
@@ -4475,6 +4494,24 @@ private StackPanel BuildSettingsSounds()
             }
         };
         panel.Children.Add(viewNotesBtn);
+
+        // ---- Automatic updates ----
+        panel.Children.Add(CreateSectionHeader("AUTOMATIC UPDATES"));
+        panel.Children.Add(CreateToggleRow("Check automatically", settings.AutoCheckUpdates, v =>
+        {
+            settings.AutoCheckUpdates = v;
+            Services.Settings.Save();
+        }));
+        panel.Children.Add(CreateToggleRow("Download automatically", settings.AutoDownloadUpdates, v =>
+        {
+            settings.AutoDownloadUpdates = v;
+            Services.Settings.Save();
+        }));
+        panel.Children.Add(CreateToggleRow("Install automatically (when idle)", settings.AutoInstallUpdates, v =>
+        {
+            settings.AutoInstallUpdates = v;
+            Services.Settings.Save();
+        }));
 
         // ---- Manifest ----
         panel.Children.Add(CreateSectionHeader("MANIFEST"));
@@ -5840,27 +5877,7 @@ private StackPanel BuildSettingsSounds()
         /// the updater helper for the main app.
         /// </summary>
         private static string? FindUpdateExecutable(string extractedDir)
-        {
-            try
-            {
-                var exes = Directory.EnumerateFiles(extractedDir, "*.exe", SearchOption.AllDirectories)
-                    .Where(p => !System.IO.Path.GetFileName(p).Contains("Updater", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                if (exes.Count == 0) return null;
-
-                var preferred = exes.FirstOrDefault(p =>
-                {
-                    var name = System.IO.Path.GetFileName(p);
-                    return name.Equals("JosephExperience.exe", StringComparison.OrdinalIgnoreCase)
-                        || name.Equals("TheJosephExperience.exe", StringComparison.OrdinalIgnoreCase);
-                });
-                return preferred ?? exes[0];
-            }
-            catch
-            {
-                return null;
-            }
-        }
+            => JosephExperience.Utilities.UpdatePackageLocator.FindExecutable(extractedDir);
 
         private void ShowReleaseNotesDialog(UpdateCheckResultData result)
         {

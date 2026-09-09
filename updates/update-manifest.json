@@ -1,17 +1,16 @@
 ﻿{
-    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.2/TheJosephExperience-v2.1.2-win-x64.zip",
+    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.3/TheJosephExperience-v2.1.3-win-x64.zip",
     "minimumSupportedVersion":  "2.0.0",
-    "version":  "2.1.2",
+    "version":  "2.1.3",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-09T02:55:37.3716090Z",
+    "releaseDateUtc":  "2026-09-09T03:56:50.5867918Z",
     "releaseType":  "release",
-    "sha256":  "38d0fb420bc4664180d520e459a18f3a67203f6b2cd87342668c77435a308b37",
+    "sha256":  "763c1abdeb12e8a4c253ca4da7b6e2ddebbf371d9e87ea92d7dde23b2532b462",
     "releaseNotes":  [
-                         "- Settings reliability pass: every dropdown/slider verified to save and apply",
-                         "- GSI Port selector now offers real port choices (was a dead single-option dropdown)",
-                         "- Auth token fully hidden from user view (managed automatically with GSI config)",
-                         "- Update dialog polish: download progress bar, Restart \u0026 Install step",
-                         "- Overlay position picker simplified to a visual 3x3 grid"
+                         "- Fully automatic cloud updates: silent check on startup + every 6h, background download with SHA-256 verify, auto-install when the celebration overlay is idle",
+                         "- Update settings: Check / Download / Install automatically toggles in Settings",
+                         "- Per-game switches: HL2 and MW2 events can be enabled independently of CS2",
+                         "- Fixed manual update install path (wrong exe path passed to backup step)"
                      ],
-    "fileSize":  98059817
+    "fileSize":  98060984
 }
