@@ -17,7 +17,10 @@ $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 if (-not $SelfContained) { throw "Friend releases must be self-contained." }
 if (Test-Path -LiteralPath (Join-Path $root "release\TheJosephExperience-v$Version-win-x64.zip")) { throw "Release ZIP already exists; choose a new version." }
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $published = gh release view "v$Version" --repo icecut710/TheJosephExperience --json tagName 2>$null
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -eq 0) { throw "Published versions are immutable; choose a new version." }
 $project = Join-Path $root "GoodJobJoseph\JosephExperience2.csproj"
 $distParent = Join-Path ([System.IO.Path]::GetTempPath()) ("JosephDistStage-" + [guid]::NewGuid())
@@ -117,7 +120,7 @@ THE JOSEPH EXPERIENCE
 
 1. Extract this entire folder.
 2. Double-click JosephExperience.exe.
-3. Press F2 to celebrate.
+3. Press Ctrl+Z (default celebrate hotkey) to celebrate.
 4. Press F8 to toggle celebration sounds on/off.
 
 Good Job, Joseph!

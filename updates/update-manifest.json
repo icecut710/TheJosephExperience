@@ -1,23 +1,16 @@
 ﻿{
-    "version":  "2.1.0",
-    "minimumSupportedVersion":  "2.0.3",
-    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.0/TheJosephExperience-v2.1.0-win-x64.zip",
+    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.1/TheJosephExperience-v2.1.1-win-x64.zip",
+    "minimumSupportedVersion":  "2.0.0",
+    "version":  "2.1.1",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-09T01:11:05.2377105Z",
+    "releaseDateUtc":  "2026-09-09T02:35:38.9879530Z",
     "releaseType":  "release",
-    "sha256":  "036971697286c67eba9a82a6b12ac5d9d99ffb3efdc9669fb7a1f4edfb271e0e",
-    "fileSize":  98718532,
+    "sha256":  "3b960a3f03614e86bd8965f6cfd05e7972632c48c45540cbb1a5cb6bac57d00e",
     "releaseNotes":  [
-                         "Fix overlay not showing for CS2 game events (threading fix; overlay calls now marshal to UI thread)",
-                         "Regenerate auth tokens on config install with fresh random tokens",
-                         "Restart CS2 button now properly restarts the game (kills cs2 process first)",
-                         "New Library audio page with separate sound clip management",
-                         "Context menus with Enable/Disable/Delete on library images and sounds",
-                         "Multi-select event chips for game integrations",
-                         "Generate new config button with fresh auth tokens",
-                         "Auth tokens hidden from UI view",
-                         "Lore pool auto-naming for imported sounds",
-                         "Animated status bar pill badges",
-                         "Hover-lift animations on stat tiles and filter chips"
-                     ]
+                         "- Update install flow fixed: live download progress bar, clear Restart \u0026 Install step, retry on failure",
+                         "- Correctly locates the app executable inside update packages (was silently failing)",
+                         "- Overlay position selector simplified: visual 3x3 grid + Follow cursor / This monitor / Custom chips",
+                         "- Release script fixes and README hotkey correction"
+                     ],
+    "fileSize":  98059837
 }

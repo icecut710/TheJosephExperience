@@ -5014,78 +5014,106 @@ private StackPanel BuildSettingsSounds()
 
     private FrameworkElement CreatePositionPicker(AppSettings settings, Action<ImagePosition> onChange)
     {
+        var container = new StackPanel();
+        var cells = new List<(Button Btn, Models.ImagePosition Pos, System.Windows.Shapes.Ellipse Dot)>();
+        var chips = new List<(Button Chip, Models.ImagePosition Pos)>();
+
+        void Refresh()
+        {
+            foreach (var (btn, pos, dot) in cells)
+            {
+                var isActive = settings.ImagePosition == pos;
+                dot.Fill = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextMutedBrush");
+                btn.BorderBrush = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush");
+                btn.BorderThickness = new Thickness(isActive ? 2 : 1);
+                btn.Background = isActive ? (Brush)FindResource("AccentSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush");
+                btn.ToolTip = isActive ? $"{pos} (current)" : pos.ToString();
+            }
+            foreach (var (chip, pos) in chips)
+            {
+                var isActive = settings.ImagePosition == pos;
+                chip.FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal;
+                chip.BorderBrush = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush");
+                chip.BorderThickness = new Thickness(isActive ? 2 : 1);
+                chip.Background = isActive ? (Brush)FindResource("AccentSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush");
+                chip.Foreground = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextSecondaryBrush");
+            }
+        }
+
+        // Visual 3×3 grid — one click picks where Joseph appears.
+        var grid = new UniformGrid { Columns = 3, Rows = 3, Margin = new Thickness(0, 4, 0, 4) };
         var positions = new[]
         {
-            (Models.ImagePosition.TopLeft,     "↖ Top Left"),
-            (Models.ImagePosition.TopCenter,   "↑ Top Center"),
-            (Models.ImagePosition.TopRight,    "↗ Top Right"),
-            (Models.ImagePosition.CenterLeft,  "← Center Left"),
-            (Models.ImagePosition.Center,      "● Center"),
-            (Models.ImagePosition.CenterRight, "→ Center Right"),
-            (Models.ImagePosition.BottomLeft,  "↙ Bottom Left"),
-            (Models.ImagePosition.BottomCenter,"↓ Bottom Center"),
-            (Models.ImagePosition.BottomRight, "↘ Bottom Right"),
+            (Models.ImagePosition.TopLeft,      "Top left"),
+            (Models.ImagePosition.TopCenter,    "Top center"),
+            (Models.ImagePosition.TopRight,     "Top right"),
+            (Models.ImagePosition.CenterLeft,   "Middle left"),
+            (Models.ImagePosition.Center,       "Center"),
+            (Models.ImagePosition.CenterRight,  "Middle right"),
+            (Models.ImagePosition.BottomLeft,   "Bottom left"),
+            (Models.ImagePosition.BottomCenter, "Bottom center"),
+            (Models.ImagePosition.BottomRight,  "Bottom right"),
         };
-
-        var grid = new UniformGrid { Columns = 3, Rows = 3, Margin = new Thickness(0, 4, 0, 4) };
         foreach (var (pos, label) in positions)
         {
-            var isActive = settings.ImagePosition == pos;
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
             var btn = new Button
             {
-                Content = label,
-                FontSize = 10.5,
-                FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
-                Padding = new Thickness(4, 6, 4, 6),
-                BorderThickness = new Thickness(isActive ? 2 : 1),
-                BorderBrush = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush"),
-                Background = isActive ? (Brush)FindResource("AccentSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush"),
-                Foreground = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextSecondaryBrush"),
-                Cursor = Cursors.Hand
+                Content = dot,
+                Width = 46,
+                Height = 34,
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                ToolTip = label
             };
             btn.Click += (_, _) =>
             {
                 settings.ImagePosition = pos;
                 Services.Settings.Save();
+                Refresh();
                 onChange(pos);
             };
+            cells.Add((btn, pos, dot));
             grid.Children.Add(btn);
         }
+        container.Children.Add(grid);
 
-        var extra = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-        extra.Children.Add(new TextBlock { Text = "Extra:", FontSize = 9.5, Foreground = (Brush)FindResource("TextMutedBrush"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-        foreach (var (pos, label) in new[]
+        // Special modes as compact chips.
+        var extra = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        var modes = new[]
         {
-            (Models.ImagePosition.CursorPosition, "Cursor"),
-            (Models.ImagePosition.ActiveMonitorCenter, "Monitor Center"),
-            (Models.ImagePosition.Custom, "Custom")
-        })
+            (Models.ImagePosition.CursorPosition, "Follow cursor", "Joseph appears at your mouse cursor"),
+            (Models.ImagePosition.ActiveMonitorCenter, "This monitor", "Joseph appears in the center of the monitor you're using"),
+            (Models.ImagePosition.Custom, "Custom", "Custom placement from the size controls"),
+        };
+        foreach (var (pos, label, tooltip) in modes)
         {
-            var isActive = settings.ImagePosition == pos;
-            var btn = new Button
+            var chip = new Button
             {
                 Content = label,
-                FontSize = 9.5,
-                FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
-                Padding = new Thickness(6, 3, 6, 3),
-                BorderThickness = new Thickness(isActive ? 2 : 1),
-                BorderBrush = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush"),
-                Background = isActive ? (Brush)FindResource("AccentSoftBrush") : (Brush)FindResource("SecondarySurfaceBrush"),
-                Foreground = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextSecondaryBrush"),
+                FontSize = 10,
+                Padding = new Thickness(9, 3, 9, 3),
+                Margin = new Thickness(0, 0, 6, 0),
                 Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 6, 0)
+                ToolTip = tooltip
             };
-            btn.Click += (_, _) =>
+            chip.Click += (_, _) =>
             {
                 settings.ImagePosition = pos;
                 Services.Settings.Save();
+                Refresh();
                 onChange(pos);
             };
-            extra.Children.Add(btn);
+            chips.Add((chip, pos));
+            extra.Children.Add(chip);
         }
-
-        var container = new StackPanel();
-        container.Children.Add(grid);
+        Refresh();
         container.Children.Add(extra);
         return container;
     }
@@ -5651,6 +5679,29 @@ private StackPanel BuildSettingsSounds()
 
             panel.Children.Add(notesBox);
 
+            // ---- Progress section (visible while downloading) ----
+            var progressPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 12), Visibility = Visibility.Collapsed };
+            var progressBar = new ProgressBar
+            {
+                Height = 6,
+                Minimum = 0,
+                Maximum = 100,
+                Value = 0,
+                Foreground = (Brush)FindResource("AccentBrush"),
+                Background = (Brush)FindResource("ElevatedBrush"),
+                BorderThickness = new Thickness(0)
+            };
+            var progressText = new TextBlock
+            {
+                Text = "Preparing download…",
+                FontSize = 10.5,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                Margin = new Thickness(0, 6, 0, 0)
+            };
+            progressPanel.Children.Add(progressBar);
+            progressPanel.Children.Add(progressText);
+            panel.Children.Add(progressPanel);
+
             var buttonRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 0) };
             buttonRow.HorizontalAlignment = HorizontalAlignment.Right;
 
@@ -5705,7 +5756,130 @@ private StackPanel BuildSettingsSounds()
 
             panel.Children.Add(buttonRow);
             win.Content = panel;
+
+            string? newExePath = null;
+            string? targetExePath = null;
+            bool staged = false;
+
+            // Live download progress → progress bar (event may fire off the UI thread).
+            updateService.DownloadProgressChanged += p =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    progressBar.Value = Math.Clamp(p.Percentage, 0, 100);
+                    var downloadedMb = p.DownloadedBytes / 1048576.0;
+                    var totalMb = p.TotalBytes / 1048576.0;
+                    progressText.Text = totalMb > 1
+                        ? $"Downloading… {downloadedMb:0.0} / {totalMb:0.0} MB ({Math.Clamp(p.Percentage, 0, 100):0}%)"
+                        : $"Downloading… {downloadedMb:0.0} MB";
+                });
+            };
+
+            void EnableRetry(string message)
+            {
+                progressText.Text = message;
+                updateNowBtn.Content = "Retry Download";
+                updateNowBtn.IsEnabled = true;
+                laterBtn.IsEnabled = true;
+            }
+
+            updateNowBtn.Click += async (_, _) =>
+            {
+                if (staged)
+                {
+                    // Second click: run the installer (swaps files, then the app restarts).
+                    updateNowBtn.IsEnabled = false;
+                    laterBtn.IsEnabled = false;
+                    progressText.Text = "Installing… the app will restart automatically.";
+                    if (updateService.LaunchUpdaterHelper(Environment.ProcessId, targetExePath ?? "", newExePath ?? ""))
+                    {
+                        _app.Shutdown();
+                    }
+                    else
+                    {
+                        EnableRetry("Installer could not start. Try again.");
+                    }
+                    return;
+                }
+
+                // First click: download → verify → extract → stage the install.
+                updateNowBtn.IsEnabled = false;
+                laterBtn.IsEnabled = false;
+                progressPanel.Visibility = Visibility.Visible;
+                progressText.Text = "Connecting…";
+
+                var finalProgress = await updateService.DownloadUpdateAsync(
+                    result.DownloadUrl ?? "",
+                    result.Sha256 ?? "",
+                    CancellationToken.None);
+
+                if (finalProgress is null || updateService.StagedPackagePath is null)
+                {
+                    EnableRetry("Download failed. Check your connection and try again.");
+                    return;
+                }
+
+                progressText.Text = "Verifying & extracting…";
+                var extractedPath = await Task.Run(() => updateService.ValidateAndExtractStagedPackage());
+                if (extractedPath is null)
+                {
+                    EnableRetry("Update package failed validation. Please try again.");
+                    return;
+                }
+
+                newExePath = FindUpdateExecutable(extractedPath);
+                if (newExePath is null)
+                {
+                    EnableRetry("Update package did not contain the app executable.");
+                    return;
+                }
+
+                var backupPath = updateService.PrepareInstall();
+                if (backupPath is null)
+                {
+                    EnableRetry("Could not back up the current app. Please try again.");
+                    return;
+                }
+                targetExePath = backupPath.Replace(".old", "");
+
+                // Staged: the user now gets a real, visible install action.
+                staged = true;
+                progressBar.Value = 100;
+                progressText.Text = $"Version {result.RemoteVersion} is ready to install.";
+                updateNowBtn.Content = "Restart & Install";
+                updateNowBtn.IsEnabled = true;
+                laterBtn.Content = "Cancel";
+            };
+
             win.ShowDialog();
+        }
+
+        /// <summary>
+        /// Locates the real app executable inside an extracted update package.
+        /// Handles both root layouts and wrapper folders, and never mistakes
+        /// the updater helper for the main app.
+        /// </summary>
+        private static string? FindUpdateExecutable(string extractedDir)
+        {
+            try
+            {
+                var exes = Directory.EnumerateFiles(extractedDir, "*.exe", SearchOption.AllDirectories)
+                    .Where(p => !System.IO.Path.GetFileName(p).Contains("Updater", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (exes.Count == 0) return null;
+
+                var preferred = exes.FirstOrDefault(p =>
+                {
+                    var name = System.IO.Path.GetFileName(p);
+                    return name.Equals("JosephExperience.exe", StringComparison.OrdinalIgnoreCase)
+                        || name.Equals("TheJosephExperience.exe", StringComparison.OrdinalIgnoreCase);
+                });
+                return preferred ?? exes[0];
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private void ShowReleaseNotesDialog(UpdateCheckResultData result)

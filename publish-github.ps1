@@ -46,7 +46,10 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 # Never change an already-published version.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $existing = gh release view "v$Version" --repo $repo --json tagName 2>$null
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -eq 0) { throw "Release v$Version already exists; choose a new version." }
 
 # ---- Create the release ----
