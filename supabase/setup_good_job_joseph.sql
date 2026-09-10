@@ -115,18 +115,31 @@ create policy "celebration_images_auth_select"
   using (true);
 
 -- ----------------------------------------------------------------------------
--- 7. Storage bucket (images)
+-- 7. Storage buckets (must match the client's cloud-config.json / .env)
+--    Images bucket  : good-job-joseph-images
+--    Audio bucket   : celebration-audio
 -- ----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
-values ('joseph-images', 'joseph-images', true)
+values ('good-job-joseph-images', 'good-job-joseph-images', true)
 on conflict (id) do nothing;
 
--- Public read access to the bucket objects (read-only).
+insert into storage.buckets (id, name, public)
+values ('celebration-audio', 'celebration-audio', true)
+on conflict (id) do nothing;
+
+-- Public read access to the image bucket objects (read-only).
 drop policy if exists "joseph_images_public_read" on storage.objects;
 create policy "joseph_images_public_read"
   on storage.objects
   for select
-  using (bucket_id = 'joseph-images');
+  using (bucket_id = 'good-job-joseph-images');
+
+-- Public read access to the audio bucket objects (read-only).
+drop policy if exists "joseph_audio_public_read" on storage.objects;
+create policy "joseph_audio_public_read"
+  on storage.objects
+  for select
+  using (bucket_id = 'celebration-audio');
 
 -- ----------------------------------------------------------------------------
 -- 8. Example seed (optional)

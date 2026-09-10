@@ -1,13 +1,13 @@
 ﻿{
-    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.4/TheJosephExperience-v2.1.4-win-x64.zip",
+    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.5/TheJosephExperience-v2.1.5-win-x64.zip",
     "minimumSupportedVersion":  "2.0.0",
-    "version":  "2.1.4",
+    "version":  "2.1.5",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-09T20:26:44.6041028Z",
+    "releaseDateUtc":  "2026-09-10T02:19:07.5856527Z",
     "releaseType":  "release",
-    "sha256":  "8c1ab221ebb017299784b4865f9742decf082986b3d23b9a1c4ff577a4faa351",
+    "sha256":  "a78d88300cc89ea2102b325a9f357e9637eb94ca6d1860a6d5dee90158b40684",
     "releaseNotes":  [
-                         "Fix update dialog; restore chart polish; HL2 + MW2 built"
+                         "Fix Supabase bucket/SQL mismatch: image bucket \u0027good-job-joseph-images\u0027 + audio bucket \u0027celebration-audio\u0027 now created with public-read RLS, writes stay authenticated/admin only (no blanket anon writes). Cloud now connects instead of HTTP 400/offline. Preset animations verified working."
                      ],
-    "fileSize":  98060821
+    "fileSize":  98060763
 }
