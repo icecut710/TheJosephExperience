@@ -21,7 +21,8 @@ public static class CelebrationResolver
         double TextScale,
         string ResolvedQuote);
 
-    public static ResolvedResult Resolve(AppSettings settings, string? imageQuote)
+    public static ResolvedResult Resolve(AppSettings settings, string? imageQuote,
+        LoreContext? loreContext = null, JosephExperience.Lore.LoreTrigger loreTrigger = JosephExperience.Lore.LoreTrigger.None)
     {
         var (imageAnim, textFx, durationMul, intensityMod) = ResolvePreset(settings.Preset);
         var intensity = settings.FxIntensity;
@@ -46,7 +47,7 @@ public static class CelebrationResolver
         duration = Math.Clamp(duration, 400, 6000);
 
         var textMode = settings.TextMode;
-        var quote = ResolveQuote(settings, imageQuote, textMode);
+        var quote = ResolveQuote(settings, imageQuote, textMode, loreContext, loreTrigger);
 
         // Synchronized FX: text delay derives from image entry duration.
         var entryMs = settings.EntryDurationMs > 0
@@ -129,18 +130,24 @@ public static class CelebrationResolver
         return candidates[Random.Shared.Next(candidates.Length)];
     }
 
-    private static string ResolveQuote(AppSettings settings, string? imageQuote, TextMode mode) => mode switch
+    private static string ResolveQuote(AppSettings settings, string? imageQuote, TextMode mode,
+        LoreContext? lore, JosephExperience.Lore.LoreTrigger trigger)
     {
-        TextMode.AssignedQuote => !string.IsNullOrWhiteSpace(imageQuote)
-            ? imageQuote!
-            : LorePools.RandomQuote(),
-        TextMode.RandomQuote => LorePools.RandomQuote(),
-        TextMode.CustomGlobal => string.IsNullOrWhiteSpace(settings.CelebrationText)
-            ? "The Joseph Experience 2.0"
-            : settings.CelebrationText,
-        TextMode.NoText => string.Empty,
-        _ => "The Joseph Experience 2.0"
-    };
+        // Hard gate: global text OFF means no lore is selected (cooldowns are not consumed).
+        var loreLine = JosephLoreService.Pick(trigger, lore, settings.ShowCelebrationText);
+        return mode switch
+        {
+            TextMode.AssignedQuote => !string.IsNullOrWhiteSpace(imageQuote)
+                ? imageQuote!
+                : (loreLine ?? LorePools.RandomQuote()),
+            TextMode.RandomQuote => loreLine ?? LorePools.RandomQuote(),
+            TextMode.CustomGlobal => string.IsNullOrWhiteSpace(settings.CelebrationText)
+                ? "The Joseph Experience 2.0"
+                : settings.CelebrationText,
+            TextMode.NoText => string.Empty,
+            _ => "The Joseph Experience 2.0"
+        };
+    }
 
     private static double EntrySpeedMul(EntrySpeed speed) => speed switch
     {

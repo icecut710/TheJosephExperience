@@ -1,13 +1,18 @@
 ﻿{
-    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.5/TheJosephExperience-v2.1.5-win-x64.zip",
+    "downloadUrl":  "https://github.com/icecut710/TheJosephExperience/releases/download/v2.1.6/TheJosephExperience-v2.1.6-win-x64.zip",
     "minimumSupportedVersion":  "2.0.0",
-    "version":  "2.1.5",
+    "version":  "2.1.6",
     "mandatory":  false,
-    "releaseDateUtc":  "2026-09-10T02:19:07.5856527Z",
+    "releaseDateUtc":  "2026-09-11T00:28:55.6095482Z",
     "releaseType":  "release",
-    "sha256":  "a78d88300cc89ea2102b325a9f357e9637eb94ca6d1860a6d5dee90158b40684",
+    "sha256":  "778f4a45cd82dd269faa99f329301d272fcb89d5139c70b13907705f5f8101fb",
     "releaseNotes":  [
-                         "Fix Supabase bucket/SQL mismatch: image bucket \u0027good-job-joseph-images\u0027 + audio bucket \u0027celebration-audio\u0027 now created with public-read RLS, writes stay authenticated/admin only (no blanket anon writes). Cloud now connects instead of HTTP 400/offline. Preset animations verified working."
+                         "- Joseph Lore System: 260 curated lore entries across all categories (IT Wizard, Router Restoration, Shawarma, Civic, Massage Chair, Printer Boss Fight, Maximum Naddaf, CS2, HL2, MW2, Cloud, Market, Audio, Errors, Recovery, Updater, Milestones, Rare/Legendary)",
+                         "- Contextual lore selection: game-specific lines only fire for their game; cloud/market/recovery lore tied to real events",
+                         "- Rarity system with cooldowns - no line repeats back-to-back, legendary lines are truly rare",
+                         "- Text-off hard gate respected: celebration text setting OFF means zero lore in overlays",
+                         "- Milestone acknowledgments at real usage thresholds (10/25/50/100/250/500/1000 celebrations)",
+                         "- Update dialog fix + chart polish + HL2/MW2 integration"
                      ],
-    "fileSize":  98060763
+    "fileSize":  98071192
 }

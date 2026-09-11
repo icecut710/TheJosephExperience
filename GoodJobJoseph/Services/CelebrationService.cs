@@ -120,7 +120,8 @@ public class CelebrationService
 
         _lastShownImageId = image.Id;
 
-        var resolved = CelebrationResolver.Resolve(settings, image.CelebrationText);
+        var resolved = CelebrationResolver.Resolve(
+            settings, image.CelebrationText, new LoreContext(), JosephExperience.Lore.LoreTrigger.Generic);
         var overlaySettings = settings.Clone();
 
         // Low-distraction: caller override > game-event auto > master setting.
@@ -371,6 +372,32 @@ public class CelebrationService
         }
     }
 
+    /// <summary>Maps a routed trigger onto lore selection context (trigger, game id, outcome flags).</summary>
+    private static (JosephExperience.Lore.LoreTrigger Trigger, string GameId, LoreContext Ctx) MapLoreContext(
+        string triggerType, CelebrationGameEvent gameEvent)
+    {
+        var gameId = triggerType.StartsWith("cs2", StringComparison.OrdinalIgnoreCase) ? "cs2"
+            : triggerType.StartsWith("hl2", StringComparison.OrdinalIgnoreCase) ? "hl2"
+            : triggerType.StartsWith("mw2", StringComparison.OrdinalIgnoreCase) ? "mw2" : "";
+
+        var t = gameEvent.Type.ToString();
+        var trig =
+            t.Contains("Multi", StringComparison.OrdinalIgnoreCase) && t.Contains("Kill", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2Multikill :
+            t.Contains("Kill", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2Kill :
+            t.Contains("Death", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2Death :
+            t.Contains("Round", StringComparison.OrdinalIgnoreCase) && t.Contains("Win", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2RoundWin :
+            t.Contains("Defuse", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2BombDefuse :
+            t.Contains("Plant", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2BombPlant :
+            t.Contains("Mvp", StringComparison.OrdinalIgnoreCase) ? JosephExperience.Lore.LoreTrigger.Cs2Mvp :
+            gameId == "hl2" ? JosephExperience.Lore.LoreTrigger.HalfLife2Event :
+            gameId == "mw2" ? JosephExperience.Lore.LoreTrigger.Mw22009Event :
+            JosephExperience.Lore.LoreTrigger.Generic;
+
+        var isDeath = t.Contains("Death", StringComparison.OrdinalIgnoreCase);
+        var ctx = new LoreContext { GameId = gameId, EventType = t, Success = !isDeath, Failure = isDeath };
+        return (trig, gameId, ctx);
+    }
+
     /// <summary>
     /// Entry point for Counter-Strike game events (and other routed triggers).
     /// Maps the per-event config onto the normal celebration pipeline.
@@ -419,8 +446,9 @@ public class CelebrationService
             }
             _lastShownImageId = image.Id;
 
-            // Text per event config.
-            var resolved = CelebrationResolver.Resolve(settings, image.CelebrationText);
+            // Text per event config. Lore context derives from the routed trigger/game.
+            var (loreTrigger, _, loreCtx) = MapLoreContext(triggerType, gameEvent);
+            var resolved = CelebrationResolver.Resolve(settings, image.CelebrationText, loreCtx, loreTrigger);
             var quote = config.TextSource switch
             {
                 GameEventTextSource.GameEventQuote => GameEventText.DefaultFor(gameEvent.Type),
